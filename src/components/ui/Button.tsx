@@ -7,7 +7,7 @@ type IconButtonVariant =
   | "round"
   | "submit"
   | "modal"
-  | "context"
+  | "theme"
   | "explorerToggle"
   | "attachmentRemove";
 
@@ -32,7 +32,7 @@ const iconClassByVariant: Record<IconButtonVariant, string> = {
   round: "round-icon-button",
   submit: "submit-button",
   modal: "modal-close-button",
-  context: "context-icon-button",
+  theme: "theme-toggle-button",
   explorerToggle: "explorer-toggle",
   attachmentRemove: "attachment-tile__remove"
 };

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import {
   ChevronRight,
-  CornerDownRight,
   File,
   FileCode2,
   Folder,
@@ -10,7 +9,6 @@ import {
   Home,
   Loader2,
   RefreshCw,
-  Search,
   TerminalSquare,
   UploadCloud
 } from "lucide-react";
@@ -28,7 +26,6 @@ type ContextMenuState = {
   x: number;
   y: number;
   target: RemoteFile | null;
-  pathQuery: string;
 };
 
 export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
@@ -38,7 +35,6 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const contextPathInputRef = useRef<HTMLInputElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -51,11 +47,6 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
     }
     void loadPath(session.cwd);
   }, [session]);
-
-  useEffect(() => {
-    if (!contextMenu) return;
-    contextPathInputRef.current?.focus();
-  }, [contextMenu]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -136,24 +127,12 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
     const menuHeight = 198;
     const x = Math.min(event.clientX, window.innerWidth - menuWidth - 8);
     const y = Math.min(event.clientY, window.innerHeight - menuHeight - 8);
-    const pathQuery = target?.type === "directory" ? target.path : currentPath || session.homeDir;
 
     setContextMenu({
       x: Math.max(8, x),
       y: Math.max(8, y),
-      target,
-      pathQuery
+      target
     });
-  }
-
-  function updateContextPath(pathQuery: string) {
-    setContextMenu((menu) => (menu ? { ...menu, pathQuery } : menu));
-  }
-
-  function submitContextPath() {
-    const pathQuery = contextMenu?.pathQuery.trim();
-    if (!pathQuery) return;
-    void loadPath(pathQuery);
   }
 
   function runContextAction(action: () => void) {
@@ -280,25 +259,6 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
-          <form
-            className="context-search"
-            onSubmit={(event) => {
-              event.preventDefault();
-              submitContextPath();
-            }}
-          >
-            <Search size={14} />
-            <Input
-              ref={contextPathInputRef}
-              value={contextMenu.pathQuery}
-              onChange={(event) => updateContextPath(event.target.value)}
-              aria-label="경로 검색"
-              placeholder="경로 검색"
-            />
-            <IconButton variant="context" type="submit" aria-label="이동" title="이동">
-              <CornerDownRight size={14} />
-            </IconButton>
-          </form>
           <Button
             variant="menuItem"
             role="menuitem"

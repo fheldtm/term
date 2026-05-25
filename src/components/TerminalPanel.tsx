@@ -5,6 +5,7 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { isTauriRuntime } from "@/lib/api";
 import type { SessionInfo } from "@/types/domain";
+import type { ThemeMode } from "@/types/theme";
 
 export type TerminalHandle = {
   send: (data: string) => void;
@@ -13,11 +14,12 @@ export type TerminalHandle = {
 
 type TerminalPanelProps = {
   session: SessionInfo | null;
+  theme: ThemeMode;
   onConnectionStateChange?: (state: "idle" | "connecting" | "connected" | "closed" | "error") => void;
 };
 
 export const TerminalPanel = forwardRef<TerminalHandle, TerminalPanelProps>(
-  ({ session, onConnectionStateChange }, ref) => {
+  ({ session, theme, onConnectionStateChange }, ref) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const terminalRef = useRef<Terminal | null>(null);
     const socketRef = useRef<WebSocket | null>(null);
@@ -67,27 +69,7 @@ export const TerminalPanel = forwardRef<TerminalHandle, TerminalPanelProps>(
         lineHeight: 1.18,
         letterSpacing: 0,
         scrollback: 6000,
-        theme: {
-          background: "#07110c",
-          foreground: "#d8e2d5",
-          cursor: "#f4f6ee",
-          black: "#06100b",
-          red: "#e05a46",
-          green: "#58d57b",
-          yellow: "#d8ad4d",
-          blue: "#76b9ff",
-          magenta: "#bd8aff",
-          cyan: "#66d5cc",
-          white: "#edf4ea",
-          brightBlack: "#526255",
-          brightRed: "#ff856e",
-          brightGreen: "#78f099",
-          brightYellow: "#f4ca68",
-          brightBlue: "#9ed0ff",
-          brightMagenta: "#d8b5ff",
-          brightCyan: "#8be8df",
-          brightWhite: "#ffffff"
-        }
+        theme: getTerminalTheme(theme)
       });
       const fit = new FitAddon();
       terminal.loadAddon(fit);
@@ -112,6 +94,12 @@ export const TerminalPanel = forwardRef<TerminalHandle, TerminalPanelProps>(
         socketRef.current = null;
       };
     }, []);
+
+    useEffect(() => {
+      const terminal = terminalRef.current;
+      if (!terminal) return;
+      terminal.options.theme = getTerminalTheme(theme);
+    }, [theme]);
 
     useEffect(() => {
       const terminal = terminalRef.current;
@@ -268,3 +256,51 @@ export const TerminalPanel = forwardRef<TerminalHandle, TerminalPanelProps>(
 );
 
 TerminalPanel.displayName = "TerminalPanel";
+
+function getTerminalTheme(theme: ThemeMode) {
+  if (theme === "light") {
+    return {
+      background: "#f8faf5",
+      foreground: "#1f2b21",
+      cursor: "#1f2b21",
+      black: "#1b211b",
+      red: "#b54232",
+      green: "#207a3f",
+      yellow: "#8b640e",
+      blue: "#1f66a8",
+      magenta: "#7f4dad",
+      cyan: "#1f7670",
+      white: "#f5f7f1",
+      brightBlack: "#6f7a6c",
+      brightRed: "#d95845",
+      brightGreen: "#2e9d55",
+      brightYellow: "#b98512",
+      brightBlue: "#2f83d1",
+      brightMagenta: "#9a6bd0",
+      brightCyan: "#2b9990",
+      brightWhite: "#ffffff"
+    };
+  }
+
+  return {
+    background: "#07110c",
+    foreground: "#d8e2d5",
+    cursor: "#f4f6ee",
+    black: "#06100b",
+    red: "#e05a46",
+    green: "#58d57b",
+    yellow: "#d8ad4d",
+    blue: "#76b9ff",
+    magenta: "#bd8aff",
+    cyan: "#66d5cc",
+    white: "#edf4ea",
+    brightBlack: "#526255",
+    brightRed: "#ff856e",
+    brightGreen: "#78f099",
+    brightYellow: "#f4ca68",
+    brightBlue: "#9ed0ff",
+    brightMagenta: "#d8b5ff",
+    brightCyan: "#8be8df",
+    brightWhite: "#ffffff"
+  };
+}

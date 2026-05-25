@@ -3,8 +3,10 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   AlertCircle,
   Cpu,
+  Moon,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Sun
 } from "lucide-react";
 import { Composer, type ComposerHandle } from "@/components/Composer";
 import { ConnectionPanel } from "@/components/ConnectionPanel";
@@ -13,11 +15,14 @@ import { TerminalPanel, type TerminalHandle } from "@/components/TerminalPanel";
 import { IconButton } from "@/components/ui";
 import { createSession, disconnectSession } from "@/lib/api";
 import type { ConnectPayload, SessionInfo } from "@/types/domain";
+import type { ThemeMode } from "@/types/theme";
 
 type ToastState = {
   tone: "ok" | "error" | "info";
   message: string;
 };
+
+const THEME_STORAGE_KEY = "ssh-terminal-composer:theme";
 
 export default function App() {
   const [session, setSession] = useState<SessionInfo | null>(null);
@@ -25,8 +30,14 @@ export default function App() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [isExplorerOpen, setIsExplorerOpen] = useState(true);
   const [explorerWidth, setExplorerWidth] = useState(300);
+  const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme());
   const terminalRef = useRef<TerminalHandle | null>(null);
   const composerRef = useRef<ComposerHandle | null>(null);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
 
   useEffect(() => {
     if (!toast) return;
@@ -95,13 +106,27 @@ export default function App() {
     window.addEventListener("pointercancel", stopResize);
   }
 
+  function toggleTheme() {
+    setTheme((value) => (value === "dark" ? "light" : "dark"));
+  }
+
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-theme={theme}>
       <ConnectionPanel
         session={session}
         isConnecting={isConnecting}
         onConnect={connect}
         onDisconnect={disconnect}
+        headerAction={(
+          <IconButton
+            variant="theme"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환"}
+            title={theme === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환"}
+          >
+            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          </IconButton>
+        )}
       />
 
       {toast ? (
@@ -139,10 +164,19 @@ export default function App() {
           >
             {isExplorerOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
           </IconButton>
-          <TerminalPanel ref={terminalRef} session={session} />
+          <TerminalPanel ref={terminalRef} session={session} theme={theme} />
           <Composer ref={composerRef} session={session} onSubmitPayload={submitPayload} />
         </section>
       </main>
     </div>
   );
+}
+
+function readStoredTheme(): ThemeMode {
+  try {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return stored === "light" ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
 }

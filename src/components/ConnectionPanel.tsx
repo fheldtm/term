@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent, KeyboardEvent } from "react";
+import type { FormEvent, KeyboardEvent, ReactNode } from "react";
 import {
   KeyRound,
   Loader2,
@@ -54,6 +54,7 @@ type ConnectionPanelProps = {
   isConnecting: boolean;
   onConnect: (payload: ConnectPayload) => Promise<SessionInfo | null>;
   onDisconnect: () => Promise<void>;
+  headerAction?: ReactNode;
 };
 
 const STORAGE_KEY = "ssh-terminal-composer:saved-connections";
@@ -71,7 +72,8 @@ export function ConnectionPanel({
   session,
   isConnecting,
   onConnect,
-  onDisconnect
+  onDisconnect,
+  headerAction
 }: ConnectionPanelProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState<ConnectionForm>(EMPTY_FORM);
@@ -236,6 +238,7 @@ export function ConnectionPanel({
               연결 종료
             </Button>
           ) : null}
+          {headerAction}
         </div>
       </div>
 
@@ -418,7 +421,7 @@ export function ConnectionPanel({
               <span>{secretLabel}</span>
             </label>
             <small>비밀번호와 key는 현재 기기의 localStorage에 저장됩니다.</small>
-            <div className="connection-form__actions">
+            <div className="save-connection-modal__actions">
               <Button variant="ghost" onClick={skipSave}>
                 저장 안 함
               </Button>
