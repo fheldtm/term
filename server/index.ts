@@ -22,8 +22,6 @@ const upload = multer({
   }
 });
 
-type SessionMode = "demo" | "ssh";
-
 type RemoteFile = {
   name: string;
   path: string;
@@ -34,7 +32,7 @@ type RemoteFile = {
 
 type BaseSession = {
   id: string;
-  mode: SessionMode;
+  mode: "ssh";
   label: string;
   host: string;
   username: string;
@@ -44,20 +42,14 @@ type BaseSession = {
   createdAt: number;
 };
 
-type DemoSession = BaseSession & {
-  mode: "demo";
-};
-
 type SshSession = BaseSession & {
   mode: "ssh";
   client: Client;
   sftp: SFTPWrapper;
 };
 
-type AppSession = DemoSession | SshSession;
-
 type ConnectBody = {
-  mode?: SessionMode;
+  mode?: "ssh";
   host?: string;
   port?: number;
   username?: string;
@@ -73,7 +65,7 @@ type UploadedMetadata = {
   sizeBytes?: number;
 };
 
-const sessions = new Map<string, AppSession>();
+const sessions = new Map<string, SshSession>();
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -99,10 +91,8 @@ app.get("/api/health", (_req, res) => {
 app.post("/api/sessions", async (req: Request<object, object, ConnectBody>, res: Response) => {
   try {
     const body = req.body;
-    if (body.mode === "demo" || !body.host) {
-      const session = createDemoSession();
-      sessions.set(session.id, session);
-      res.json(publicSession(session));
+    if (!body.host) {
+      res.status(400).json({ message: "host is required" });
       return;
     }
 
@@ -174,11 +164,6 @@ app.get("/api/sessions/:sessionId/files", async (req, res) => {
   const targetPath = resolveRemotePath(requestedPath, session.homeDir);
 
   try {
-    if (session.mode === "demo") {
-      res.json({ path: targetPath, files: listDemoFiles(targetPath) });
-      return;
-    }
-
     const entries = await sftpReaddir(session.sftp, targetPath);
     const files: RemoteFile[] = entries
       .map((entry) => {
@@ -293,11 +278,6 @@ terminalWss.on("connection", (ws: WebSocket, _request: unknown, sessionId: strin
     return;
   }
 
-  if (session.mode === "demo") {
-    openDemoTerminal(ws, session);
-    return;
-  }
-
   openSshTerminal(ws, session);
 });
 
@@ -305,23 +285,7 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`SSH Terminal Composer server listening on http://0.0.0.0:${PORT}`);
 });
 
-function createDemoSession(): DemoSession {
-  const id = randomUUID();
-  const homeDir = "/home/fheldtm";
-  return {
-    id,
-    mode: "demo",
-    label: "demo@192.168.0.210",
-    host: "192.168.0.210",
-    username: "demo",
-    homeDir,
-    cwd: posixJoin(homeDir, "project"),
-    uploadRoot: posixJoin(homeDir, ".terminal-composer", "uploads"),
-    createdAt: Date.now()
-  };
-}
-
-function publicSession(session: AppSession) {
+function publicSession(session: SshSession) {
   return {
     id: session.id,
     mode: session.mode,
@@ -441,31 +405,6 @@ function openSshTerminal(ws: WebSocket, session: SshSession) {
 
   ws.on("close", () => {
     channel?.end();
-  });
-}
-
-function openDemoTerminal(ws: WebSocket, session: DemoSession) {
-  ws.send(
-    JSON.stringify({
-      type: "output",
-      data:
-        "\x1b[32mWelcome to Ubuntu 24.04.4 LTS\x1b[0m\r\n" +
-        `Last login: ${new Date().toDateString()} from 192.168.0.10\r\n` +
-        `\x1b[36m${session.cwd.replace(session.homeDir, "~")}\x1b[0m $ `
-    })
-  );
-
-  ws.on("message", (raw) => {
-    const message = parseSocketMessage(raw.toString());
-    if (!message || message.type !== "input") return;
-    ws.send(JSON.stringify({ type: "output", data: message.data }));
-    if (message.data.endsWith("\n")) {
-      setTimeout(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "output", data: `\r\n\x1b[36m${session.cwd.replace(session.homeDir, "~")}\x1b[0m $ ` }));
-        }
-      }, 120);
-    }
   });
 }
 
@@ -606,39 +545,4 @@ function localDateString(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function listDemoFiles(targetPath: string): RemoteFile[] {
-  const now = Date.now();
-  const project = "/home/fheldtm/project";
-  const rows: Record<string, RemoteFile[]> = {
-    [project]: [
-      directory("src", project, now - 4_000_000),
-      directory("components", project, now - 3_700_000),
-      directory("server", project, now - 2_700_000),
-      directory("uploads", project, now - 1_700_000),
-      file("package.json", project, 4096, now - 900_000),
-      file("README.md", project, 9200, now - 800_000),
-      file("terminal-session.log", project, 18_432, now - 600_000),
-      directory(".terminal-composer", project, now - 300_000)
-    ],
-    [posixJoin(project, "src")]: [
-      file("main.tsx", posixJoin(project, "src"), 1800, now - 800_000),
-      file("App.tsx", posixJoin(project, "src"), 12_400, now - 700_000),
-      directory("components", posixJoin(project, "src"), now - 650_000)
-    ],
-    [posixJoin(project, "uploads")]: [
-      file("screen.png", posixJoin(project, "uploads"), 607_976, now - 300_000),
-      file("server.log", posixJoin(project, "uploads"), 18_432, now - 250_000)
-    ]
-  };
-  return (rows[targetPath] || rows[project]).sort(sortRemoteFiles);
-}
-
-function directory(name: string, parent: string, modifiedAt: number): RemoteFile {
-  return { name, path: posixJoin(parent, name), type: "directory", size: 0, modifiedAt };
-}
-
-function file(name: string, parent: string, size: number, modifiedAt: number): RemoteFile {
-  return { name, path: posixJoin(parent, name), type: "file", size, modifiedAt };
 }

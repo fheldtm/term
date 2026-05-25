@@ -50,13 +50,12 @@ Android release APK signing은 선택 사항입니다. GitHub repository secrets
 
 ## 사용 흐름
 
-1. 앱을 열면 데모 세션이 자동으로 시작됩니다.
-2. 실제 서버에 붙으려면 `SSH 설정`에서 host, port, user, password 또는 private key를 입력합니다.
-3. 좌측 파일 탐색기에서 원격 경로를 확인합니다.
-4. composer에 텍스트를 입력합니다.
-5. 파일 버튼, 드래그앤드롭, 붙여넣기로 파일을 추가합니다.
-6. 현재 커서 위치에 `[_imageN]` 또는 `[_fileN]` 토큰이 삽입됩니다.
-7. 제출 버튼을 누르면 첨부 업로드 후 터미널로 payload가 전송됩니다.
+1. 앱을 열고 `SSH 설정`에서 host, port, user, password 또는 private key를 입력합니다.
+2. 연결 후 좌측 파일 탐색기에서 원격 경로를 확인합니다.
+3. composer에 텍스트를 입력합니다.
+4. 파일 버튼, 드래그앤드롭, 붙여넣기로 파일을 추가합니다.
+5. 현재 커서 위치에 `[_imageN]` 또는 `[_fileN]` 토큰이 삽입됩니다.
+6. 제출 버튼을 누르면 첨부 업로드 후 터미널로 payload가 전송됩니다.
 
 ## Payload 예시
 

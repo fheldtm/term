@@ -32,7 +32,6 @@ struct ManagedSession {
 }
 
 enum SessionKind {
-  Demo,
   Ssh { ssh: Arc<Mutex<Session>> },
 }
 
@@ -59,7 +58,6 @@ struct SessionInfo {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ConnectPayload {
-  mode: Option<String>,
   host: Option<String>,
   port: Option<u16>,
   username: Option<String>,
@@ -130,18 +128,10 @@ struct TerminalError {
 
 #[tauri::command]
 fn create_session(payload: ConnectPayload, state: State<'_, AppState>) -> Result<SessionInfo> {
-  if payload.mode.as_deref() == Some("demo") || payload.host.as_deref().unwrap_or("").is_empty() {
-    let session = create_demo_session();
-    let info = session.info.clone();
-    state
-      .sessions
-      .lock()
-      .map_err(lock_error)?
-      .insert(info.id.clone(), session);
-    return Ok(info);
-  }
-
-  let host = payload.host.ok_or_else(|| "host is required".to_string())?;
+  let host = payload
+    .host
+    .filter(|value| !value.trim().is_empty())
+    .ok_or_else(|| "host is required".to_string())?;
   let username = payload
     .username
     .filter(|value| !value.trim().is_empty())
@@ -231,35 +221,28 @@ fn list_files(session_id: String, path: String, state: State<'_, AppState>) -> R
     .ok_or_else(|| "session not found".to_string())?;
   let target_path = resolve_remote_path(path.as_str(), session.info.home_dir.as_str());
 
-  match &session.kind {
-    SessionKind::Demo => Ok(FileListResponse {
-      path: target_path.clone(),
-      files: list_demo_files(target_path.as_str()),
-    }),
-    SessionKind::Ssh { ssh } => {
-      let ssh = ssh.lock().map_err(lock_error)?;
-      let sftp = ssh.sftp().map_err(to_error)?;
-      let entries = sftp.readdir(Path::new(target_path.as_str())).map_err(to_error)?;
-      let mut files = entries
-        .into_iter()
-        .filter_map(|(path, stat)| {
-          let name = path.file_name()?.to_string_lossy().to_string();
-          Some(RemoteFile {
-            path: posix_join(&[target_path.as_str(), name.as_str()]),
-            name,
-            file_type: stat_type(&stat),
-            size: stat.size.unwrap_or(0),
-            modified_at: stat.mtime.unwrap_or(0) * 1000,
-          })
-        })
-        .collect::<Vec<_>>();
-      files.sort_by(sort_remote_files);
-      Ok(FileListResponse {
-        path: target_path,
-        files,
+  let SessionKind::Ssh { ssh } = &session.kind;
+  let ssh = ssh.lock().map_err(lock_error)?;
+  let sftp = ssh.sftp().map_err(to_error)?;
+  let entries = sftp.readdir(Path::new(target_path.as_str())).map_err(to_error)?;
+  let mut files = entries
+    .into_iter()
+    .filter_map(|(path, stat)| {
+      let name = path.file_name()?.to_string_lossy().to_string();
+      Some(RemoteFile {
+        path: posix_join(&[target_path.as_str(), name.as_str()]),
+        name,
+        file_type: stat_type(&stat),
+        size: stat.size.unwrap_or(0),
+        modified_at: stat.mtime.unwrap_or(0) * 1000,
       })
-    }
-  }
+    })
+    .collect::<Vec<_>>();
+  files.sort_by(sort_remote_files);
+  Ok(FileListResponse {
+    path: target_path,
+    files,
+  })
 }
 
 #[tauri::command]
@@ -279,54 +262,34 @@ fn upload_files(
     &session.info.id[..8],
   ]);
 
-  match &session.kind {
-    SessionKind::Demo => {
-      let uploaded = files
-        .into_iter()
-        .map(|file| UploadedFile {
-          remote_path: posix_join(&[upload_dir.as_str(), sanitize_file_name(file.original_name.as_str()).as_str()]),
-          token: file.token,
-          original_name: sanitize_file_name(file.original_name.as_str()),
-          mime_type: file.mime_type,
-          size_bytes: file.size_bytes,
-          status: "uploaded".to_string(),
-        })
-        .collect();
-      Ok(UploadResponse {
-        upload_dir,
-        files: uploaded,
-      })
-    }
-    SessionKind::Ssh { ssh } => {
-      let ssh = ssh.lock().map_err(lock_error)?;
-      let sftp = ssh.sftp().map_err(to_error)?;
-      mkdirp(&sftp, upload_dir.as_str())?;
+  let SessionKind::Ssh { ssh } = &session.kind;
+  let ssh = ssh.lock().map_err(lock_error)?;
+  let sftp = ssh.sftp().map_err(to_error)?;
+  mkdirp(&sftp, upload_dir.as_str())?;
 
-      let mut uploaded = Vec::with_capacity(files.len());
-      for file in files {
-        let file_name = sanitize_file_name(file.original_name.as_str());
-        let remote_path = next_available_remote_path(&sftp, upload_dir.as_str(), file_name.as_str())?;
-        let data = general_purpose::STANDARD
-          .decode(file.data_base64.as_bytes())
-          .map_err(to_error)?;
-        let mut remote_file = sftp.create(Path::new(remote_path.as_str())).map_err(to_error)?;
-        remote_file.write_all(data.as_slice()).map_err(to_error)?;
-        uploaded.push(UploadedFile {
-          token: file.token,
-          original_name: file_name,
-          mime_type: file.mime_type,
-          size_bytes: file.size_bytes,
-          remote_path,
-          status: "uploaded".to_string(),
-        });
-      }
-
-      Ok(UploadResponse {
-        upload_dir,
-        files: uploaded,
-      })
-    }
+  let mut uploaded = Vec::with_capacity(files.len());
+  for file in files {
+    let file_name = sanitize_file_name(file.original_name.as_str());
+    let remote_path = next_available_remote_path(&sftp, upload_dir.as_str(), file_name.as_str())?;
+    let data = general_purpose::STANDARD
+      .decode(file.data_base64.as_bytes())
+      .map_err(to_error)?;
+    let mut remote_file = sftp.create(Path::new(remote_path.as_str())).map_err(to_error)?;
+    remote_file.write_all(data.as_slice()).map_err(to_error)?;
+    uploaded.push(UploadedFile {
+      token: file.token,
+      original_name: file_name,
+      mime_type: file.mime_type,
+      size_bytes: file.size_bytes,
+      remote_path,
+      status: "uploaded".to_string(),
+    });
   }
+
+  Ok(UploadResponse {
+    upload_dir,
+    files: uploaded,
+  })
 }
 
 #[tauri::command]
@@ -344,15 +307,9 @@ fn terminal_open(session_id: String, app: AppHandle, state: State<'_, AppState>)
   session.terminal_tx = Some(tx);
   let info = session.info.clone();
 
-  match &session.kind {
-    SessionKind::Demo => {
-      thread::spawn(move || run_demo_terminal(app, info, rx));
-    }
-    SessionKind::Ssh { ssh } => {
-      let ssh = ssh.clone();
-      thread::spawn(move || run_ssh_terminal(app, info, ssh, rx));
-    }
-  }
+  let SessionKind::Ssh { ssh } = &session.kind;
+  let ssh = ssh.clone();
+  thread::spawn(move || run_ssh_terminal(app, info, ssh, rx));
 
   Ok(())
 }
@@ -377,33 +334,6 @@ fn send_terminal_command(state: &State<'_, AppState>, session_id: &str, command:
     .as_ref()
     .ok_or_else(|| "terminal is not open".to_string())?;
   tx.send(command).map_err(to_error)
-}
-
-fn run_demo_terminal(app: AppHandle, info: SessionInfo, rx: Receiver<TerminalCommand>) {
-  let prompt = format!("\x1b[36m{}\x1b[0m $ ", info.cwd.replace(info.home_dir.as_str(), "~"));
-  emit_output(
-    &app,
-    &info.id,
-    format!(
-      "\x1b[32mWelcome to Ubuntu 24.04.4 LTS\x1b[0m\r\nLast login: {} from 192.168.0.10\r\n{}",
-      Local::now().format("%a %b %d %Y"),
-      prompt
-    ),
-  );
-
-  while let Ok(command) = rx.recv() {
-    match command {
-      TerminalCommand::Input(data) => {
-        emit_output(&app, &info.id, data.clone());
-        if data.ends_with('\n') || data.ends_with('\r') {
-          thread::sleep(Duration::from_millis(80));
-          emit_output(&app, &info.id, format!("\r\n{prompt}"));
-        }
-      }
-      TerminalCommand::Resize { .. } => {}
-      TerminalCommand::Close => break,
-    }
-  }
 }
 
 fn run_ssh_terminal(app: AppHandle, info: SessionInfo, ssh: Arc<Mutex<Session>>, rx: Receiver<TerminalCommand>) {
@@ -485,28 +415,6 @@ fn emit_error(app: &AppHandle, session_id: &str, message: String) {
       message,
     },
   );
-}
-
-fn create_demo_session() -> ManagedSession {
-  let id = Uuid::new_v4().to_string();
-  let home_dir = "/home/fheldtm".to_string();
-  let cwd = posix_join(&[home_dir.as_str(), "project"]);
-  let info = SessionInfo {
-    id,
-    mode: "demo".to_string(),
-    label: "demo@192.168.0.210".to_string(),
-    host: "192.168.0.210".to_string(),
-    username: "demo".to_string(),
-    home_dir: home_dir.clone(),
-    cwd,
-    upload_root: posix_join(&[home_dir.as_str(), ".terminal-composer", "uploads"]),
-    created_at: now_ms(),
-  };
-  ManagedSession {
-    info,
-    kind: SessionKind::Demo,
-    terminal_tx: None,
-  }
 }
 
 fn read_remote_home(ssh: &Session) -> Result<(String, String)> {
@@ -691,56 +599,6 @@ fn to_error(error: impl std::fmt::Display) -> String {
 
 fn lock_error<T>(error: std::sync::PoisonError<T>) -> String {
   error.to_string()
-}
-
-fn list_demo_files(target_path: &str) -> Vec<RemoteFile> {
-  let home = "/home/fheldtm";
-  let project = "/home/fheldtm/project";
-  let now = now_ms();
-  let mut files = match target_path {
-    path if path == project => vec![
-      directory(".terminal-composer", project, now - 300_000),
-      directory("components", project, now - 3_700_000),
-      directory("server", project, now - 2_700_000),
-      directory("src", project, now - 4_000_000),
-      directory("uploads", project, now - 1_700_000),
-      file("package.json", project, 4096, now - 900_000),
-      file("README.md", project, 9200, now - 800_000),
-      file("terminal-session.log", project, 18_432, now - 600_000),
-    ],
-    path if path == home => vec![
-      directory("project", home, now - 500_000),
-      directory(".ssh", home, now - 700_000),
-      directory("Downloads", home, now - 800_000),
-    ],
-    path if path == "/home/fheldtm/project/uploads" => vec![
-      file("screen.png", path, 607_976, now - 300_000),
-      file("server.log", path, 18_432, now - 250_000),
-    ],
-    _ => vec![],
-  };
-  files.sort_by(sort_remote_files);
-  files
-}
-
-fn directory(name: &str, parent: &str, modified_at: u64) -> RemoteFile {
-  RemoteFile {
-    name: name.to_string(),
-    path: posix_join(&[parent, name]),
-    file_type: "directory".to_string(),
-    size: 0,
-    modified_at,
-  }
-}
-
-fn file(name: &str, parent: &str, size: u64, modified_at: u64) -> RemoteFile {
-  RemoteFile {
-    name: name.to_string(),
-    path: posix_join(&[parent, name]),
-    file_type: "file".to_string(),
-    size,
-    modified_at,
-  }
 }
 
 mod libc_mode {

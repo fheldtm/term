@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { KeyRound, Loader2, Play, Plug, Server, Unplug } from "lucide-react";
+import { KeyRound, Loader2, Plug, Server, Unplug } from "lucide-react";
 import type { ConnectPayload, SessionInfo } from "@/types/domain";
 
 type ConnectionPanelProps = {
   session: SessionInfo | null;
   isConnecting: boolean;
   onConnect: (payload: ConnectPayload) => Promise<void>;
-  onDemo: () => Promise<void>;
   onDisconnect: () => Promise<void>;
 };
 
@@ -14,12 +13,11 @@ export function ConnectionPanel({
   session,
   isConnecting,
   onConnect,
-  onDemo,
   onDisconnect
 }: ConnectionPanelProps) {
-  const [host, setHost] = useState("192.168.0.210");
+  const [host, setHost] = useState("");
   const [port, setPort] = useState(22);
-  const [username, setUsername] = useState("fheldtm");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [privateKey, setPrivateKey] = useState("");
   const [authMode, setAuthMode] = useState<"password" | "key">("password");
@@ -45,8 +43,8 @@ export function ConnectionPanel({
             <strong>{session ? session.label : "연결되지 않음"}</strong>
             <span>
               {session
-                ? `${session.mode === "demo" ? "Demo" : "SSH"} · ${session.cwd}`
-                : "SSH 정보를 입력하거나 데모 세션을 시작하세요"}
+                ? `SSH · ${session.cwd}`
+                : "SSH 정보를 입력하세요"}
             </span>
           </div>
         </div>
@@ -55,10 +53,6 @@ export function ConnectionPanel({
           <button className="ghost-button" type="button" onClick={() => setIsExpanded((value) => !value)}>
             <KeyRound size={15} />
             SSH 설정
-          </button>
-          <button className="ghost-button" type="button" onClick={() => void onDemo()} disabled={isConnecting}>
-            <Play size={15} />
-            데모 시작
           </button>
           {session ? (
             <button className="danger-button" type="button" onClick={() => void onDisconnect()} disabled={isConnecting}>

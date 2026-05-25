@@ -129,7 +129,7 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
           <div className="empty-state">
             <TerminalSquare size={22} />
             <strong>SSH 세션을 연결하세요</strong>
-            <span>데모 세션을 시작하면 파일 탐색과 composer 흐름을 바로 확인할 수 있습니다.</span>
+            <span>연결 후 원격 파일 시스템을 탐색할 수 있습니다.</span>
           </div>
         ) : files.length ? (
           files.map((file) => (

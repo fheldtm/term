@@ -1,4 +1,4 @@
-export type SessionMode = "demo" | "ssh";
+export type SessionMode = "ssh";
 
 export type SessionInfo = {
   id: string;

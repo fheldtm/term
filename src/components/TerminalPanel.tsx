@@ -125,7 +125,7 @@ export const TerminalPanel = forwardRef<TerminalHandle, TerminalPanelProps>(
       if (!session) {
         setStatus("세션 대기 중");
         onConnectionStateChange?.("idle");
-        terminal.writeln("SSH 세션을 연결하거나 데모 세션을 시작하세요.");
+        terminal.writeln("SSH 세션을 연결하세요.");
         return;
       }
 

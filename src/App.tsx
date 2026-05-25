@@ -28,13 +28,6 @@ export default function App() {
   const [isExplorerOpen, setIsExplorerOpen] = useState(true);
   const terminalRef = useRef<TerminalHandle | null>(null);
   const composerRef = useRef<ComposerHandle | null>(null);
-  const bootstrappedRef = useRef(false);
-
-  useEffect(() => {
-    if (bootstrappedRef.current) return;
-    bootstrappedRef.current = true;
-    void startDemo();
-  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -56,20 +49,6 @@ export default function App() {
       const nextSession = await createSession(payload);
       setSession(nextSession);
       setToast({ tone: "ok", message: `${nextSession.label} 연결됨` });
-    } catch (error) {
-      setToast({ tone: "error", message: error instanceof Error ? error.message : String(error) });
-    } finally {
-      setIsConnecting(false);
-    }
-  }
-
-  async function startDemo() {
-    setIsConnecting(true);
-    try {
-      if (session) await disconnectSession(session.id);
-      const nextSession = await createSession({ mode: "demo" });
-      setSession(nextSession);
-      setToast({ tone: "info", message: "데모 세션을 시작했습니다. 실제 SSH 정보로 다시 연결할 수 있습니다." });
     } catch (error) {
       setToast({ tone: "error", message: error instanceof Error ? error.message : String(error) });
     } finally {
@@ -130,7 +109,6 @@ export default function App() {
         session={session}
         isConnecting={isConnecting}
         onConnect={connect}
-        onDemo={startDemo}
         onDisconnect={disconnect}
       />
 
