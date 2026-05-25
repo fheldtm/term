@@ -63,10 +63,21 @@ jobs:
       - run: npm ci
       - run: npm run tauri:windows:build
 
+      - name: Normalize Windows release assets
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          asset_dir="release-assets"
+          setup="$(find src-tauri/target/x86_64-pc-windows-gnu/release/bundle/nsis -maxdepth 1 -type f -name '*_x64-setup.exe' | sort | tail -n 1)"
+
+          mkdir -p "$asset_dir"
+          cp "$setup" "$asset_dir/SSH-Terminal-Composer_${version}_x64-setup.exe"
+          cp src-tauri/target/x86_64-pc-windows-gnu/release/app.exe "$asset_dir/SSH-Terminal-Composer_${version}_x64-portable.exe"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-x64-installer
-          path: src-tauri/target/x86_64-pc-windows-gnu/release/bundle/nsis/*.exe
+          name: windows-x64
+          path: release-assets/*.exe
           if-no-files-found: error
 
   build-android:
@@ -128,10 +139,16 @@ jobs:
             aligned.apk
           "$build_tools/apksigner" verify --verbose "$signed"
 
+      - name: Normalize Android release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp src-tauri/gen/android/app/build/outputs/apk/universal/release/ssh-terminal-composer-universal-release-signed.apk release-assets/
+
       - uses: actions/upload-artifact@v4
         with:
           name: android-universal-apk
-          path: src-tauri/gen/android/app/build/outputs/apk/universal/release/ssh-terminal-composer-universal-release-signed.apk
+          path: release-assets/*.apk
           if-no-files-found: error
 
   release:
@@ -146,6 +163,11 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - name: Generate checksums
+        working-directory: artifacts
+        run: sha256sum * > SHA256SUMS.txt
+
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*
+          overwrite_files: true
