@@ -100,7 +100,7 @@ jobs:
       - run: npm ci
       - run: npm run tauri:android:build
 
-      - name: Sign APK when Android signing secrets are configured
+      - name: Sign Android release APK
         env:
           ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -109,11 +109,11 @@ jobs:
         run: |
           set -euo pipefail
           unsigned="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
-          signed="src-tauri/gen/android/app/build/outputs/apk/universal/release/ssh-terminal-composer-arm64-release-signed.apk"
+          signed="src-tauri/gen/android/app/build/outputs/apk/universal/release/ssh-terminal-composer-universal-release-signed.apk"
 
           if [ -z "${ANDROID_KEYSTORE_B64}" ] || [ -z "${ANDROID_KEYSTORE_PASSWORD}" ] || [ -z "${ANDROID_KEY_ALIAS}" ] || [ -z "${ANDROID_KEY_PASSWORD}" ]; then
-            echo "Android signing secrets are not configured. Uploading unsigned release APK."
-            exit 0
+            echo "::error::Android signing secrets are required for release APKs."
+            exit 1
           fi
 
           build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
@@ -130,9 +130,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: android-arm64-apk
-          path: |
-            src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
+          name: android-universal-apk
+          path: src-tauri/gen/android/app/build/outputs/apk/universal/release/ssh-terminal-composer-universal-release-signed.apk
           if-no-files-found: error
 
   release:

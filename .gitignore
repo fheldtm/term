@@ -6,6 +6,8 @@ dist-server/
 *.apk
 *.aab
 *.apks
+*.jks
+*.keystore
 *.AppImage
 *.deb
 *.rpm
