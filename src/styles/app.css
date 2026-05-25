@@ -657,6 +657,10 @@ button:disabled {
   display: none;
 }
 
+.mobile-explorer-backdrop {
+  display: none;
+}
+
 .file-explorer {
   grid-column: 1;
   display: flex;
@@ -753,7 +757,7 @@ body.is-resizing-explorer {
 }
 
 .file-table {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   padding: 6px 0;
@@ -817,38 +821,6 @@ body.is-resizing-explorer {
 .empty-state span {
   font-size: 12px;
   line-height: 1.5;
-}
-
-.explorer-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 54px;
-  padding: 9px 10px;
-  border-top: 1px solid var(--line);
-}
-
-.explorer-footer div {
-  min-width: 0;
-}
-
-.explorer-footer span,
-.explorer-footer strong {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.explorer-footer span {
-  color: var(--text-soft);
-  font-size: 10px;
-}
-
-.explorer-footer strong {
-  font-size: 12px;
 }
 
 .secondary-button {
@@ -1162,39 +1134,153 @@ body.is-resizing-explorer {
 
 @media (max-width: 720px) {
   body {
-    overflow: auto;
+    overflow: hidden;
   }
 
   .app-shell {
-    min-height: 100%;
-    height: auto;
+    height: 100%;
+    height: 100dvh;
+    min-height: 0;
   }
 
   .workspace,
   .workspace.is-explorer-closed {
+    position: relative;
     grid-template-columns: 1fr !important;
-    grid-template-rows: 260px minmax(680px, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    overflow: hidden;
+  }
+
+  .connection-panel__main {
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .connection-status {
+    width: 100%;
+  }
+
+  .connection-status span {
+    max-width: calc(100vw - 20px);
+  }
+
+  .connection-actions {
+    width: 100%;
+    gap: 6px;
+  }
+
+  .connection-actions .primary-button,
+  .connection-actions .danger-button {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 9px;
   }
 
   .explorer-resizer {
     display: none;
   }
 
+  .mobile-explorer-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 14;
+    display: block;
+    border: 0;
+    background: var(--modal-backdrop);
+    cursor: pointer;
+  }
+
   .file-explorer {
-    grid-column: 1;
-    grid-row: 1;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 15;
+    width: min(360px, 88vw);
+    max-width: calc(100vw - 44px);
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+    box-shadow: var(--shadow);
+    transform: translateX(0);
+    transition:
+      transform 160ms ease,
+      visibility 160ms ease;
   }
 
   .workspace.is-explorer-closed .file-explorer {
-    display: none;
+    display: flex;
+    visibility: hidden;
+    pointer-events: none;
+    border-right: 1px solid var(--line);
+    transform: translateX(calc(-100% - 8px));
   }
 
   .terminal-workbench {
     grid-column: 1;
-    grid-row: 2;
-    min-height: 680px;
+    grid-row: 1;
+    min-height: 0;
+  }
+
+  .explorer-toggle {
+    top: 4px;
+    left: 8px;
+    z-index: 30;
+  }
+
+  .file-explorer .panel-title {
+    min-height: 48px;
+    padding-left: 52px;
+  }
+
+  .path-row {
+    grid-template-columns: var(--control-icon-size) var(--control-icon-size) minmax(0, 1fr);
+    padding: 8px;
+  }
+
+  .file-row {
+    min-height: 34px;
+    grid-template-columns: 22px minmax(0, 1fr) 58px;
+  }
+
+  .file-row__date {
+    display: none;
+  }
+
+  .terminal-panel {
+    grid-template-rows: 36px minmax(0, 1fr);
+  }
+
+  .terminal-panel__bar {
+    height: 36px;
+    padding: 0 10px 0 48px;
+  }
+
+  .terminal-panel__surface {
+    padding: 8px 6px;
+  }
+
+  .composer {
+    min-height: 128px;
+    max-height: 44dvh;
+  }
+
+  .composer-preview {
+    min-height: 92px;
+    max-height: 116px;
+    padding: 10px 10px 6px;
+  }
+
+  .attachment-tile {
+    width: 116px;
+    flex-basis: 116px;
+  }
+
+  .composer-body {
+    grid-template-rows: minmax(52px, auto) var(--control-height);
+    min-height: 104px;
+    padding: 9px 10px;
+  }
+
+  .composer-status {
+    max-width: calc(100vw - 110px);
   }
 
   .connection-modal,
@@ -1222,13 +1308,5 @@ body.is-resizing-explorer {
     top: auto;
     right: 10px;
     bottom: 10px;
-  }
-
-  .file-row {
-    grid-template-columns: 22px minmax(0, 1fr) 58px;
-  }
-
-  .file-row__date {
-    display: none;
   }
 }

@@ -13,6 +13,7 @@ import {
 } from "ssh2";
 import { WebSocket, WebSocketServer } from "ws";
 
+const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 8787);
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -281,8 +282,8 @@ terminalWss.on("connection", (ws: WebSocket, _request: unknown, sessionId: strin
   openSshTerminal(ws, session);
 });
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`SSH Terminal Composer server listening on http://0.0.0.0:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`SSH Terminal Composer server listening on http://${HOST}:${PORT}`);
 });
 
 function publicSession(session: SshSession) {

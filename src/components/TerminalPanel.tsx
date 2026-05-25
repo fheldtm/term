@@ -3,7 +3,6 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { isTauriRuntime } from "@/lib/api";
 import type { SessionInfo } from "@/types/domain";
 import type { ThemeMode } from "@/types/theme";
 
@@ -23,25 +22,11 @@ export const TerminalPanel = forwardRef<TerminalHandle, TerminalPanelProps>(
     const containerRef = useRef<HTMLDivElement | null>(null);
     const terminalRef = useRef<Terminal | null>(null);
     const socketRef = useRef<WebSocket | null>(null);
-    const tauriSessionRef = useRef<string | null>(null);
     const fitRef = useRef<FitAddon | null>(null);
     const [status, setStatus] = useState("세션 대기 중");
 
     useImperativeHandle(ref, () => ({
       send(data: string) {
-        if (isTauriRuntime()) {
-          const sessionId = tauriSessionRef.current;
-          if (!sessionId) {
-            terminalRef.current?.writeln("\r\n[terminal] session is not connected");
-            return;
-          }
-          void import("@tauri-apps/api/core").then(({ invoke }) =>
-            invoke("terminal_input", { sessionId, data })
-          );
-          terminalRef.current?.focus();
-          return;
-        }
-
         const socket = socketRef.current;
         if (socket?.readyState === WebSocket.OPEN) {
           socket.send(JSON.stringify({ type: "input", data }));
@@ -107,7 +92,6 @@ export const TerminalPanel = forwardRef<TerminalHandle, TerminalPanelProps>(
 
       socketRef.current?.close();
       socketRef.current = null;
-      tauriSessionRef.current = null;
       terminal.reset();
 
       if (!session) {
@@ -119,65 +103,6 @@ export const TerminalPanel = forwardRef<TerminalHandle, TerminalPanelProps>(
 
       setStatus("터미널 연결 중");
       onConnectionStateChange?.("connecting");
-
-      if (isTauriRuntime()) {
-        let unlistenOutput: (() => void) | undefined;
-        let unlistenError: (() => void) | undefined;
-        let disposed = false;
-        tauriSessionRef.current = session.id;
-
-        void Promise.all([
-          import("@tauri-apps/api/core"),
-          import("@tauri-apps/api/event")
-        ])
-          .then(async ([{ invoke }, { listen }]) => {
-            unlistenOutput = await listen<{ sessionId: string; data: string }>(
-              "terminal-output",
-              (event) => {
-                if (event.payload.sessionId === session.id) {
-                  terminal.write(event.payload.data);
-                }
-              }
-            );
-            unlistenError = await listen<{ sessionId: string; message: string }>(
-              "terminal-error",
-              (event) => {
-                if (event.payload.sessionId === session.id) {
-                  terminal.writeln(`\r\n[terminal] ${event.payload.message}`);
-                  setStatus("터미널 오류");
-                  onConnectionStateChange?.("error");
-                }
-              }
-            );
-
-            if (disposed) return;
-            await invoke("terminal_open", { sessionId: session.id });
-            setStatus("터미널 연결됨");
-            onConnectionStateChange?.("connected");
-            setTimeout(sendResize, 20);
-          })
-          .catch((error) => {
-            terminal.writeln(`\r\n[terminal] ${error instanceof Error ? error.message : String(error)}`);
-            setStatus("터미널 오류");
-            onConnectionStateChange?.("error");
-          });
-
-        const dataSubscription = terminal.onData((data) => {
-          void import("@tauri-apps/api/core").then(({ invoke }) =>
-            invoke("terminal_input", { sessionId: session.id, data })
-          );
-        });
-
-        return () => {
-          disposed = true;
-          dataSubscription.dispose();
-          unlistenOutput?.();
-          unlistenError?.();
-          void import("@tauri-apps/api/core").then(({ invoke }) =>
-            invoke("terminal_input", { sessionId: session.id, data: "\u0004" }).catch(() => undefined)
-          );
-        };
-      }
 
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
       const socket = new WebSocket(`${protocol}://${window.location.host}/ws/terminal/${session.id}`);
@@ -231,14 +156,6 @@ export const TerminalPanel = forwardRef<TerminalHandle, TerminalPanelProps>(
       const socket = socketRef.current;
       const terminal = terminalRef.current;
       if (!terminal) return;
-      if (isTauriRuntime()) {
-        const sessionId = tauriSessionRef.current;
-        if (!sessionId) return;
-        void import("@tauri-apps/api/core").then(({ invoke }) =>
-          invoke("terminal_resize", { sessionId, cols: terminal.cols, rows: terminal.rows })
-        );
-        return;
-      }
       if (!socket || socket.readyState !== WebSocket.OPEN) return;
       socket.send(JSON.stringify({ type: "resize", cols: terminal.cols, rows: terminal.rows }));
     }

@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Button, IconButton, Input } from "@/components/ui";
 import { listFiles } from "@/lib/api";
-import { formatBytes, formatDateTime, parentPath, pathBasename } from "@/lib/format";
+import { formatBytes, formatDateTime, parentPath } from "@/lib/format";
 import type { RemoteFile, SessionInfo } from "@/types/domain";
 
 type FileExplorerProps = {
@@ -31,7 +31,7 @@ type ContextMenuState = {
 export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
   const [currentPath, setCurrentPath] = useState("");
   const [files, setFiles] = useState<RemoteFile[]>([]);
-  const [selectedPath, setSelectedPath] = useState("");
+  const [selectedKey, setSelectedKey] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -41,7 +41,7 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
     if (!session) {
       setCurrentPath("");
       setFiles([]);
-      setSelectedPath("");
+      setSelectedKey("");
       setContextMenu(null);
       return;
     }
@@ -78,11 +78,28 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
     };
   }, [contextMenu]);
 
-  const selectedFile = useMemo(
-    () => files.find((file) => file.path === selectedPath),
-    [files, selectedPath]
-  );
   const homePath = session?.homeDir ?? "";
+  const displayFiles = useMemo<RemoteFile[]>(() => {
+    if (!session || !currentPath) return files;
+
+    const currentEntry: RemoteFile = {
+      name: ".",
+      path: currentPath,
+      type: "directory",
+      size: 0,
+      modifiedAt: 0
+    };
+    const parentEntry: RemoteFile = {
+      name: "..",
+      path: parentPath(currentPath, session.homeDir),
+      type: "directory",
+      size: 0,
+      modifiedAt: 0
+    };
+
+    const remoteFiles = files.filter((file) => file.name !== "." && file.name !== "..");
+    return [parentEntry, currentEntry, ...remoteFiles];
+  }, [currentPath, files, session]);
 
   async function loadPath(path: string) {
     if (!session) return;
@@ -94,7 +111,7 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
       const response = await listFiles(session.id, nextPath);
       setCurrentPath(response.path);
       setFiles(response.files);
-      setSelectedPath("");
+      setSelectedKey("");
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
     } finally {
@@ -103,14 +120,14 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
   }
 
   function openEntry(file: RemoteFile) {
-    setSelectedPath(file.path);
+    setSelectedKey(fileRowKey(file));
     if (file.type === "directory") {
       void loadPath(file.path);
     }
   }
 
   function selectEntry(file: RemoteFile, clickCount: number) {
-    setSelectedPath(file.path);
+    setSelectedKey(fileRowKey(file));
     if (clickCount >= 2 && file.type === "directory") {
       void loadPath(file.path);
     }
@@ -121,7 +138,7 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
     event.preventDefault();
     event.stopPropagation();
 
-    if (target) setSelectedPath(target.path);
+    if (target) setSelectedKey(fileRowKey(target));
 
     const menuWidth = 278;
     const menuHeight = 198;
@@ -144,6 +161,10 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
     if (file.type === "directory") return <Folder size={15} />;
     if (/\.(ts|tsx|js|jsx|json|md|css|html|log)$/i.test(file.name)) return <FileCode2 size={15} />;
     return <File size={15} />;
+  }
+
+  function fileRowKey(file: RemoteFile) {
+    return `${file.name}:${file.path}`;
   }
 
   return (
@@ -177,7 +198,7 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
         <IconButton
           variant="toolbar"
           onClick={() => session && void loadPath(parentPath(currentPath, session.homeDir))}
-          disabled={!session || currentPath === session.homeDir}
+          disabled={!session || currentPath === "/"}
           aria-label="상위 폴더"
           title="상위 폴더"
         >
@@ -203,12 +224,12 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
             <strong>SSH 세션을 연결하세요</strong>
             <span>연결 후 원격 파일 시스템을 탐색할 수 있습니다.</span>
           </div>
-        ) : files.length ? (
-          files.map((file) => (
+        ) : displayFiles.length ? (
+          displayFiles.map((file) => (
             <button
-              className={`file-row ${selectedPath === file.path ? "is-selected" : ""}`}
+              className={`file-row ${selectedKey === fileRowKey(file) ? "is-selected" : ""}`}
               type="button"
-              key={file.path}
+              key={fileRowKey(file)}
               onClick={(event) => selectEntry(file, event.detail)}
               onContextMenu={(event) => openContextMenu(event, file)}
               onKeyDown={(event) => {
@@ -219,7 +240,7 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
               }}
             >
               <span className="file-row__icon">
-                {file.type === "directory" && selectedPath === file.path ? <FolderOpen size={15} /> : renderIcon(file)}
+                {file.type === "directory" && selectedKey === fileRowKey(file) ? <FolderOpen size={15} /> : renderIcon(file)}
               </span>
               <span className="file-row__name">{file.name}</span>
               <span className="file-row__size">{file.type === "directory" ? "-" : formatBytes(file.size)}</span>
@@ -233,21 +254,6 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
             <span>경로를 바꾸거나 새로고침하세요.</span>
           </div>
         )}
-      </div>
-
-      <div className="explorer-footer">
-        <div>
-          <span>선택</span>
-          <strong>{selectedFile ? pathBasename(selectedFile.path) : "-"}</strong>
-        </div>
-        <Button
-          variant="secondary"
-          disabled={!selectedFile}
-          onClick={() => selectedFile && onInsertPath(selectedFile.path)}
-        >
-          <UploadCloud size={15} />
-          경로 삽입
-        </Button>
       </div>
 
       {contextMenu ? (

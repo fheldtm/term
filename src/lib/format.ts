@@ -26,8 +26,9 @@ export function pathBasename(remotePath: string) {
   return parts.at(-1) || remotePath;
 }
 
-export function parentPath(remotePath: string, homeDir: string) {
-  if (remotePath === homeDir) return homeDir;
+export function parentPath(remotePath: string, fallbackPath = "/") {
+  if (!remotePath) return fallbackPath;
+  if (remotePath === "/") return "/";
   const parent = remotePath.replace(/\/+$/, "").split("/").slice(0, -1).join("/") || "/";
-  return parent.startsWith(homeDir) ? parent : homeDir;
+  return parent;
 }

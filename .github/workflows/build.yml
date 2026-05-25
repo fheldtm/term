@@ -23,151 +23,40 @@ jobs:
           node-version: 22
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            pkg-config
-
       - run: npm ci
       - run: npm run typecheck
-      - run: cargo check --manifest-path src-tauri/Cargo.toml
-
-  build-windows:
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-24.04
-    needs: check
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-gnu
-
-      - name: Install Windows cross build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y mingw-w64 nsis wixl
-
-      - run: npm ci
-      - run: npm run tauri:windows:build
-
-      - name: Normalize Windows release assets
-        run: |
-          set -euo pipefail
-          version="$(node -p "require('./package.json').version")"
-          asset_dir="release-assets"
-          setup="$(find src-tauri/target/x86_64-pc-windows-gnu/release/bundle/nsis -maxdepth 1 -type f -name '*_x64-setup.exe' | sort | tail -n 1)"
-
-          mkdir -p "$asset_dir"
-          cp "$setup" "$asset_dir/SSH-Terminal-Composer_${version}_x64-setup.exe"
-          cp src-tauri/target/x86_64-pc-windows-gnu/release/app.exe "$asset_dir/SSH-Terminal-Composer_${version}_x64-portable.exe"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-x64
-          path: release-assets/*.exe
-          if-no-files-found: error
-
-  build-android:
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-24.04
-    needs: check
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 21
-
-      - uses: android-actions/setup-android@v3
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android
-
-      - name: Install Android SDK packages
-        run: |
-          sdkmanager "platforms;android-36" "build-tools;35.0.0" "ndk;28.2.13676358"
-          yes | sdkmanager --licenses >/dev/null || true
-
-      - run: npm ci
-      - run: npm run tauri:android:build
-
-      - name: Sign Android release APK
-        env:
-          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          unsigned="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
-          signed="src-tauri/gen/android/app/build/outputs/apk/universal/release/ssh-terminal-composer-universal-release-signed.apk"
-
-          if [ -z "${ANDROID_KEYSTORE_B64}" ] || [ -z "${ANDROID_KEYSTORE_PASSWORD}" ] || [ -z "${ANDROID_KEY_ALIAS}" ] || [ -z "${ANDROID_KEY_PASSWORD}" ]; then
-            echo "::error::Android signing secrets are required for release APKs."
-            exit 1
-          fi
-
-          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
-          echo "$ANDROID_KEYSTORE_B64" | base64 -d > release.jks
-          "$build_tools/zipalign" -p -f 4 "$unsigned" aligned.apk
-          "$build_tools/apksigner" sign \
-            --ks release.jks \
-            --ks-pass "pass:${ANDROID_KEYSTORE_PASSWORD}" \
-            --ks-key-alias "$ANDROID_KEY_ALIAS" \
-            --key-pass "pass:${ANDROID_KEY_PASSWORD}" \
-            --out "$signed" \
-            aligned.apk
-          "$build_tools/apksigner" verify --verbose "$signed"
-
-      - name: Normalize Android release assets
-        run: |
-          set -euo pipefail
-          mkdir -p release-assets
-          cp src-tauri/gen/android/app/build/outputs/apk/universal/release/ssh-terminal-composer-universal-release-signed.apk release-assets/
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: android-universal-apk
-          path: release-assets/*.apk
-          if-no-files-found: error
+      - run: npm run build
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
-    needs:
-      - build-windows
-      - build-android
+    needs: check
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
         with:
-          path: artifacts
-          merge-multiple: true
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Package web server bundle
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          bundle="ssh-terminal-composer-web-${version}"
+          mkdir -p "release-assets/${bundle}"
+          cp -R dist dist-server package.json package-lock.json README.md "release-assets/${bundle}/"
+          tar -C release-assets -czf "release-assets/${bundle}.tar.gz" "${bundle}"
+          rm -rf "release-assets/${bundle}"
 
       - name: Generate checksums
-        working-directory: artifacts
+        working-directory: release-assets
         run: sha256sum * > SHA256SUMS.txt
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/*
+          files: release-assets/*
           overwrite_files: true

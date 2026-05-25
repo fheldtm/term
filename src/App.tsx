@@ -3,10 +3,12 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   AlertCircle,
   Cpu,
+  Menu,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
-  Sun
+  Sun,
+  X
 } from "lucide-react";
 import { Composer, type ComposerHandle } from "@/components/Composer";
 import { ConnectionPanel } from "@/components/ConnectionPanel";
@@ -23,12 +25,14 @@ type ToastState = {
 };
 
 const THEME_STORAGE_KEY = "ssh-terminal-composer:theme";
+const MOBILE_EXPLORER_QUERY = "(max-width: 720px)";
 
 export default function App() {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [isExplorerOpen, setIsExplorerOpen] = useState(true);
+  const [isMobileExplorer, setIsMobileExplorer] = useState(() => readIsMobileExplorer());
+  const [isExplorerOpen, setIsExplorerOpen] = useState(() => !readIsMobileExplorer());
   const [explorerWidth, setExplorerWidth] = useState(300);
   const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme());
   const terminalRef = useRef<TerminalHandle | null>(null);
@@ -38,6 +42,31 @@ export default function App() {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(MOBILE_EXPLORER_QUERY);
+
+    function syncExplorerMode(event: MediaQueryList | MediaQueryListEvent) {
+      const isMobile = event.matches;
+      setIsMobileExplorer(isMobile);
+      setIsExplorerOpen(isMobile ? false : true);
+    }
+
+    syncExplorerMode(mediaQuery);
+    mediaQuery.addEventListener("change", syncExplorerMode);
+    return () => mediaQuery.removeEventListener("change", syncExplorerMode);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileExplorer || !isExplorerOpen) return;
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setIsExplorerOpen(false);
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [isExplorerOpen, isMobileExplorer]);
 
   useEffect(() => {
     if (!toast) return;
@@ -81,6 +110,7 @@ export default function App() {
 
   function insertPath(path: string) {
     composerRef.current?.insertText(path);
+    if (isMobileExplorer) setIsExplorerOpen(false);
   }
 
   function startExplorerResize(event: ReactPointerEvent<HTMLDivElement>) {
@@ -148,6 +178,14 @@ export default function App() {
         }}
       >
         <FileExplorer session={session} onInsertPath={insertPath} />
+        {isExplorerOpen ? (
+          <button
+            className="mobile-explorer-backdrop"
+            type="button"
+            aria-label="파일 탐색기 닫기"
+            onClick={() => setIsExplorerOpen(false)}
+          />
+        ) : null}
         <div
           className="explorer-resizer"
           role="separator"
@@ -159,10 +197,16 @@ export default function App() {
           <IconButton
             variant="explorerToggle"
             onClick={() => setIsExplorerOpen((value) => !value)}
-            aria-label="파일 탐색기 토글"
-            title="파일 탐색기 토글"
+            aria-label={
+              isMobileExplorer ? (isExplorerOpen ? "파일 탐색기 닫기" : "파일 탐색기 열기") : "파일 탐색기 토글"
+            }
+            title={
+              isMobileExplorer ? (isExplorerOpen ? "파일 탐색기 닫기" : "파일 탐색기 열기") : "파일 탐색기 토글"
+            }
           >
-            {isExplorerOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+            {isMobileExplorer
+              ? (isExplorerOpen ? <X size={17} /> : <Menu size={17} />)
+              : (isExplorerOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />)}
           </IconButton>
           <TerminalPanel ref={terminalRef} session={session} theme={theme} />
           <Composer ref={composerRef} session={session} onSubmitPayload={submitPayload} />
@@ -170,6 +214,14 @@ export default function App() {
       </main>
     </div>
   );
+}
+
+function readIsMobileExplorer() {
+  try {
+    return window.matchMedia(MOBILE_EXPLORER_QUERY).matches;
+  } catch {
+    return false;
+  }
 }
 
 function readStoredTheme(): ThemeMode {
