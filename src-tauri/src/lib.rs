@@ -32,7 +32,10 @@ struct ManagedSession {
 }
 
 enum SessionKind {
-  Ssh { ssh: Arc<Mutex<Session>> },
+  Ssh {
+    terminal_ssh: Arc<Mutex<Session>>,
+    file_ssh: Arc<Mutex<Session>>,
+  },
 }
 
 enum TerminalCommand {
@@ -138,38 +141,27 @@ fn create_session(payload: ConnectPayload, state: State<'_, AppState>) -> Result
     .ok_or_else(|| "username is required".to_string())?;
   let port = payload.port.unwrap_or(22);
 
-  let tcp = TcpStream::connect((host.as_str(), port)).map_err(to_error)?;
-  tcp
-    .set_read_timeout(Some(Duration::from_secs(15)))
-    .map_err(to_error)?;
-  tcp
-    .set_write_timeout(Some(Duration::from_secs(15)))
-    .map_err(to_error)?;
+  let password = payload.password;
+  let private_key = payload.private_key;
+  let passphrase = payload.passphrase;
+  let terminal_ssh = connect_ssh_session(
+    host.as_str(),
+    port,
+    username.as_str(),
+    password.as_deref(),
+    private_key.as_deref(),
+    passphrase.as_deref(),
+  )?;
+  let file_ssh = connect_ssh_session(
+    host.as_str(),
+    port,
+    username.as_str(),
+    password.as_deref(),
+    private_key.as_deref(),
+    passphrase.as_deref(),
+  )?;
 
-  let mut ssh = Session::new().map_err(to_error)?;
-  ssh.set_tcp_stream(tcp);
-  ssh.handshake().map_err(to_error)?;
-
-  if let Some(private_key) = payload.private_key.filter(|value| !value.trim().is_empty()) {
-    ssh
-      .userauth_pubkey_memory(
-        username.as_str(),
-        None,
-        private_key.as_str(),
-        payload.passphrase.as_deref(),
-      )
-      .map_err(to_error)?;
-  } else {
-    ssh
-      .userauth_password(username.as_str(), payload.password.as_deref().unwrap_or(""))
-      .map_err(to_error)?;
-  }
-
-  if !ssh.authenticated() {
-    return Err("SSH authentication failed".to_string());
-  }
-
-  let (home_dir, cwd) = read_remote_home(&ssh)?;
+  let (home_dir, cwd) = read_remote_home(&terminal_ssh)?;
   let id = Uuid::new_v4().to_string();
   let info = SessionInfo {
     id: id.clone(),
@@ -185,7 +177,8 @@ fn create_session(payload: ConnectPayload, state: State<'_, AppState>) -> Result
   let session = ManagedSession {
     info: info.clone(),
     kind: SessionKind::Ssh {
-      ssh: Arc::new(Mutex::new(ssh)),
+      terminal_ssh: Arc::new(Mutex::new(terminal_ssh)),
+      file_ssh: Arc::new(Mutex::new(file_ssh)),
     },
     terminal_tx: None,
   };
@@ -213,6 +206,43 @@ fn disconnect_session(session_id: String, state: State<'_, AppState>) -> Result<
   Ok(())
 }
 
+fn connect_ssh_session(
+  host: &str,
+  port: u16,
+  username: &str,
+  password: Option<&str>,
+  private_key: Option<&str>,
+  passphrase: Option<&str>,
+) -> Result<Session> {
+  let tcp = TcpStream::connect((host, port)).map_err(to_error)?;
+  tcp
+    .set_read_timeout(Some(Duration::from_secs(15)))
+    .map_err(to_error)?;
+  tcp
+    .set_write_timeout(Some(Duration::from_secs(15)))
+    .map_err(to_error)?;
+
+  let mut ssh = Session::new().map_err(to_error)?;
+  ssh.set_tcp_stream(tcp);
+  ssh.handshake().map_err(to_error)?;
+
+  if let Some(private_key) = private_key.filter(|value| !value.trim().is_empty()) {
+    ssh
+      .userauth_pubkey_memory(username, None, private_key, passphrase)
+      .map_err(to_error)?;
+  } else {
+    ssh
+      .userauth_password(username, password.unwrap_or(""))
+      .map_err(to_error)?;
+  }
+
+  if !ssh.authenticated() {
+    return Err("SSH authentication failed".to_string());
+  }
+
+  Ok(ssh)
+}
+
 #[tauri::command]
 fn list_files(session_id: String, path: String, state: State<'_, AppState>) -> Result<FileListResponse> {
   let sessions = state.sessions.lock().map_err(lock_error)?;
@@ -221,8 +251,8 @@ fn list_files(session_id: String, path: String, state: State<'_, AppState>) -> R
     .ok_or_else(|| "session not found".to_string())?;
   let target_path = resolve_remote_path(path.as_str(), session.info.home_dir.as_str());
 
-  let SessionKind::Ssh { ssh } = &session.kind;
-  let ssh = ssh.lock().map_err(lock_error)?;
+  let SessionKind::Ssh { file_ssh, .. } = &session.kind;
+  let ssh = file_ssh.lock().map_err(lock_error)?;
   let sftp = ssh.sftp().map_err(to_error)?;
   let entries = sftp.readdir(Path::new(target_path.as_str())).map_err(to_error)?;
   let mut files = entries
@@ -262,8 +292,8 @@ fn upload_files(
     &session.info.id[..8],
   ]);
 
-  let SessionKind::Ssh { ssh } = &session.kind;
-  let ssh = ssh.lock().map_err(lock_error)?;
+  let SessionKind::Ssh { file_ssh, .. } = &session.kind;
+  let ssh = file_ssh.lock().map_err(lock_error)?;
   let sftp = ssh.sftp().map_err(to_error)?;
   mkdirp(&sftp, upload_dir.as_str())?;
 
@@ -307,9 +337,9 @@ fn terminal_open(session_id: String, app: AppHandle, state: State<'_, AppState>)
   session.terminal_tx = Some(tx);
   let info = session.info.clone();
 
-  let SessionKind::Ssh { ssh } = &session.kind;
-  let ssh = ssh.clone();
-  thread::spawn(move || run_ssh_terminal(app, info, ssh, rx));
+  let SessionKind::Ssh { terminal_ssh, .. } = &session.kind;
+  let terminal_ssh = terminal_ssh.clone();
+  thread::spawn(move || run_ssh_terminal(app, info, terminal_ssh, rx));
 
   Ok(())
 }
@@ -337,7 +367,10 @@ fn send_terminal_command(state: &State<'_, AppState>, session_id: &str, command:
 }
 
 fn run_ssh_terminal(app: AppHandle, info: SessionInfo, ssh: Arc<Mutex<Session>>, rx: Receiver<TerminalCommand>) {
-  let mut channel = match ssh.lock().map_err(lock_error).and_then(|ssh| ssh.channel_session().map_err(to_error)) {
+  let mut channel = match ssh.lock().map_err(lock_error).and_then(|ssh| {
+    ssh.set_blocking(true);
+    ssh.channel_session().map_err(to_error)
+  }) {
     Ok(channel) => channel,
     Err(error) => {
       emit_error(&app, &info.id, error);

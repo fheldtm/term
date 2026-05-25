@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import {
-  Activity,
   AlertCircle,
-  CheckCircle2,
   Cpu,
   PanelLeftClose,
-  PanelLeftOpen,
-  Terminal as TerminalIcon
+  PanelLeftOpen
 } from "lucide-react";
 import { Composer, type ComposerHandle } from "@/components/Composer";
 import { ConnectionPanel } from "@/components/ConnectionPanel";
@@ -23,9 +21,9 @@ type ToastState = {
 export default function App() {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [terminalState, setTerminalState] = useState<"idle" | "connecting" | "connected" | "closed" | "error">("idle");
   const [toast, setToast] = useState<ToastState | null>(null);
   const [isExplorerOpen, setIsExplorerOpen] = useState(true);
+  const [explorerWidth, setExplorerWidth] = useState(300);
   const terminalRef = useRef<TerminalHandle | null>(null);
   const composerRef = useRef<ComposerHandle | null>(null);
 
@@ -34,13 +32,6 @@ export default function App() {
     const timer = window.setTimeout(() => setToast(null), 4200);
     return () => window.clearTimeout(timer);
   }, [toast]);
-
-  const handleTerminalState = useCallback(
-    (state: "idle" | "connecting" | "connected" | "closed" | "error") => {
-      setTerminalState(state);
-    },
-    []
-  );
 
   async function connect(payload: ConnectPayload) {
     setIsConnecting(true);
@@ -78,33 +69,31 @@ export default function App() {
     composerRef.current?.insertText(path);
   }
 
-  const statusIcon =
-    terminalState === "connected" ? (
-      <CheckCircle2 size={15} />
-    ) : terminalState === "error" ? (
-      <AlertCircle size={15} />
-    ) : (
-      <Activity size={15} />
-    );
+  function startExplorerResize(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = explorerWidth;
+    document.body.classList.add("is-resizing-explorer");
+
+    function handlePointerMove(moveEvent: PointerEvent) {
+      const nextWidth = Math.min(560, Math.max(220, startWidth + moveEvent.clientX - startX));
+      setExplorerWidth(nextWidth);
+    }
+
+    function stopResize() {
+      document.body.classList.remove("is-resizing-explorer");
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResize);
+    window.addEventListener("pointercancel", stopResize);
+  }
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <div className="brand-block">
-          <div className="brand-mark">
-            <TerminalIcon size={18} />
-          </div>
-          <div>
-            <h1>SSH Terminal Composer</h1>
-            <span>xterm · SFTP uploads · token composer</span>
-          </div>
-        </div>
-        <div className={`terminal-state is-${terminalState}`}>
-          {statusIcon}
-          <span>{terminalState}</span>
-        </div>
-      </header>
-
       <ConnectionPanel
         session={session}
         isConnecting={isConnecting}
@@ -122,8 +111,22 @@ export default function App() {
         </div>
       ) : null}
 
-      <main className={`workspace ${isExplorerOpen ? "" : "is-explorer-closed"}`}>
+      <main
+        className={`workspace ${isExplorerOpen ? "" : "is-explorer-closed"}`}
+        style={{
+          gridTemplateColumns: isExplorerOpen
+            ? `${explorerWidth}px 6px minmax(0, 1fr)`
+            : "0 0 minmax(0, 1fr)"
+        }}
+      >
         <FileExplorer session={session} onInsertPath={insertPath} />
+        <div
+          className="explorer-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="파일 탐색기 너비 조절"
+          onPointerDown={startExplorerResize}
+        />
         <section className="terminal-workbench">
           <button
             className="explorer-toggle"
@@ -134,7 +137,7 @@ export default function App() {
           >
             {isExplorerOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
           </button>
-          <TerminalPanel ref={terminalRef} session={session} onConnectionStateChange={handleTerminalState} />
+          <TerminalPanel ref={terminalRef} session={session} />
           <Composer ref={composerRef} session={session} onSubmitPayload={submitPayload} />
         </section>
       </main>

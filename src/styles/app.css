@@ -52,7 +52,7 @@ button {
 
 .app-shell {
   display: grid;
-  grid-template-rows: 46px auto 1fr;
+  grid-template-rows: auto 1fr;
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -62,69 +62,10 @@ button {
     var(--bg);
 }
 
-.app-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-width: 0;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--line);
-  background: #111811;
-}
-
-.brand-block {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid #436042;
-  background: #0c130e;
-  color: var(--green);
-}
-
-.brand-block h1 {
-  margin: 0;
-  color: var(--text);
-  font-size: 15px;
-  line-height: 1.05;
-}
-
-.brand-block span,
-.terminal-state span,
 .connection-status span,
 .panel-title span {
   color: var(--text-soft);
   font-size: 11px;
-}
-
-.terminal-state {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  border: 1px solid #314031;
-  background: #131b14;
-  padding: 6px 9px;
-  color: var(--text-soft);
-  font-size: 12px;
-}
-
-.terminal-state.is-connected {
-  color: var(--green);
-  border-color: rgba(99, 220, 129, 0.5);
-}
-
-.terminal-state.is-error {
-  color: #ff8b7b;
-  border-color: rgba(216, 82, 63, 0.55);
 }
 
 .connection-panel {
@@ -297,7 +238,7 @@ button:disabled {
 
 .toast {
   position: absolute;
-  top: 104px;
+  top: 58px;
   right: 14px;
   z-index: 20;
   display: flex;
@@ -329,18 +270,17 @@ button:disabled {
 
 .workspace {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
-}
-
-.workspace.is-explorer-closed {
-  grid-template-columns: 0 minmax(0, 1fr);
 }
 
 .workspace.is-explorer-closed .file-explorer {
   overflow: hidden;
   border-right-width: 0;
+}
+
+.workspace.is-explorer-closed .explorer-resizer {
+  display: none;
 }
 
 .file-explorer {
@@ -350,6 +290,32 @@ button:disabled {
   min-height: 0;
   border-right: 1px solid var(--line);
   background: var(--panel);
+}
+
+.explorer-resizer {
+  position: relative;
+  z-index: 9;
+  min-width: 6px;
+  cursor: col-resize;
+  background: #121a13;
+  border-right: 1px solid var(--line);
+}
+
+.explorer-resizer::before {
+  content: "";
+  position: absolute;
+  inset: 0 2px;
+  background: transparent;
+}
+
+.explorer-resizer:hover,
+body.is-resizing-explorer .explorer-resizer {
+  background: #203021;
+}
+
+body.is-resizing-explorer {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .panel-title {
@@ -573,20 +539,21 @@ button:disabled {
 .terminal-workbench {
   position: relative;
   display: grid;
-  grid-template-rows: minmax(260px, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 .explorer-toggle {
   position: absolute;
-  top: 9px;
-  left: 9px;
+  top: 3px;
+  left: 7px;
   z-index: 6;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border: 1px solid #314031;
   background: rgba(17, 24, 17, 0.9);
   color: var(--text-soft);
@@ -607,7 +574,7 @@ button:disabled {
   justify-content: space-between;
   gap: 12px;
   height: 34px;
-  padding: 0 12px 0 48px;
+  padding: 0 12px 0 44px;
   border-bottom: 1px solid #203020;
   background: #0b140e;
   color: var(--text-soft);
@@ -625,6 +592,7 @@ button:disabled {
   min-width: 0;
   min-height: 0;
   padding: 10px 8px;
+  overflow: hidden;
 }
 
 .terminal-panel .xterm {
@@ -806,10 +774,9 @@ button:disabled {
 
 @media (max-width: 980px) {
   .app-shell {
-    grid-template-rows: auto auto 1fr;
+    grid-template-rows: auto 1fr;
   }
 
-  .app-header,
   .connection-panel__main {
     align-items: flex-start;
     flex-direction: column;
@@ -829,7 +796,7 @@ button:disabled {
   }
 
   .workspace {
-    grid-template-columns: minmax(230px, 34vw) minmax(0, 1fr);
+    grid-template-columns: minmax(230px, 34vw) 6px minmax(0, 1fr);
   }
 }
 
@@ -845,8 +812,12 @@ button:disabled {
 
   .workspace,
   .workspace.is-explorer-closed {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
     grid-template-rows: 260px minmax(680px, 1fr);
+  }
+
+  .explorer-resizer {
+    display: none;
   }
 
   .file-explorer {
