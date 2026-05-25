@@ -10,6 +10,7 @@ import { Composer, type ComposerHandle } from "@/components/Composer";
 import { ConnectionPanel } from "@/components/ConnectionPanel";
 import { FileExplorer } from "@/components/FileExplorer";
 import { TerminalPanel, type TerminalHandle } from "@/components/TerminalPanel";
+import { IconButton } from "@/components/ui";
 import { createSession, disconnectSession } from "@/lib/api";
 import type { ConnectPayload, SessionInfo } from "@/types/domain";
 
@@ -40,8 +41,10 @@ export default function App() {
       const nextSession = await createSession(payload);
       setSession(nextSession);
       setToast({ tone: "ok", message: `${nextSession.label} 연결됨` });
+      return nextSession;
     } catch (error) {
       setToast({ tone: "error", message: error instanceof Error ? error.message : String(error) });
+      return null;
     } finally {
       setIsConnecting(false);
     }
@@ -128,15 +131,14 @@ export default function App() {
           onPointerDown={startExplorerResize}
         />
         <section className="terminal-workbench">
-          <button
-            className="explorer-toggle"
-            type="button"
+          <IconButton
+            variant="explorerToggle"
             onClick={() => setIsExplorerOpen((value) => !value)}
             aria-label="파일 탐색기 토글"
             title="파일 탐색기 토글"
           >
             {isExplorerOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
-          </button>
+          </IconButton>
           <TerminalPanel ref={terminalRef} session={session} />
           <Composer ref={composerRef} session={session} onSubmitPayload={submitPayload} />
         </section>

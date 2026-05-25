@@ -14,6 +14,7 @@ import {
   SendHorizontal,
   X
 } from "lucide-react";
+import { IconButton, TextArea } from "@/components/ui";
 import { uploadFiles } from "@/lib/api";
 import { formatBytes, safeFileName } from "@/lib/format";
 import { buildTerminalPayload, validateComposer } from "@/lib/payload";
@@ -284,14 +285,13 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(({ session, on
         <div className="composer-preview" aria-label="첨부 Preview">
           {attachments.map((item) => (
             <article className={`attachment-tile is-${item.kind}`} key={item.id}>
-              <button
-                type="button"
-                className="attachment-tile__remove"
+              <IconButton
+                variant="attachmentRemove"
                 onClick={() => removeAttachment(item.id)}
                 aria-label={`${item.token} 삭제`}
               >
                 <X size={14} />
-              </button>
+              </IconButton>
               <div className="attachment-tile__media">
                 {item.kind === "image" && item.previewUrl ? (
                   <img src={item.previewUrl} alt={`${item.originalName} preview`} />
@@ -308,7 +308,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(({ session, on
       ) : null}
 
       <div className="composer-body">
-        <textarea
+        <TextArea
           ref={textareaRef}
           value={text}
           onChange={(event) => setText(event.target.value)}
@@ -324,30 +324,28 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(({ session, on
         />
         <div className="composer-toolbar">
           <div className="composer-toolbar__left">
-            <button
-              className="round-icon-button"
-              type="button"
+            <IconButton
+              variant="round"
               onClick={() => fileInputRef.current?.click()}
               aria-label="파일 선택"
               title="파일 선택"
             >
               <Paperclip size={18} />
-            </button>
+            </IconButton>
             <span className={`composer-status ${message || validation.unknownTokens.length ? "is-error" : ""}`}>
               {message || validation.unknownTokens.length ? <AlertTriangle size={14} /> : <Image size={14} />}
               {statusText()}
             </span>
           </div>
-          <button
-            className="submit-button"
-            type="button"
+          <IconButton
+            variant="submit"
             onClick={() => void submit()}
             disabled={!canSubmit}
             aria-label="터미널로 제출"
             title="터미널로 제출"
           >
             <SendHorizontal size={18} />
-          </button>
+          </IconButton>
         </div>
       </div>
 

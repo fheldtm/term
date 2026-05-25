@@ -14,6 +14,7 @@ import {
   TerminalSquare,
   UploadCloud
 } from "lucide-react";
+import { Button, IconButton, Input } from "@/components/ui";
 import { listFiles } from "@/lib/api";
 import { formatBytes, formatDateTime, parentPath, pathBasename } from "@/lib/format";
 import type { RemoteFile, SessionInfo } from "@/types/domain";
@@ -38,6 +39,7 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
   const [error, setError] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const contextPathInputRef = useRef<HTMLInputElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!session) {
@@ -62,17 +64,23 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
       setContextMenu(null);
     }
 
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && contextMenuRef.current?.contains(target)) return;
+      closeContextMenu();
+    }
+
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") closeContextMenu();
     }
 
-    window.addEventListener("click", closeContextMenu);
+    window.addEventListener("pointerdown", handlePointerDown, true);
     window.addEventListener("resize", closeContextMenu);
     window.addEventListener("scroll", closeContextMenu, true);
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      window.removeEventListener("click", closeContextMenu);
+      window.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("resize", closeContextMenu);
       window.removeEventListener("scroll", closeContextMenu, true);
       window.removeEventListener("keydown", handleKeyDown);
@@ -166,40 +174,37 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
           <strong>EXPLORER</strong>
           <span>{session ? session.host : "세션 없음"}</span>
         </div>
-        <button
-          className="icon-action"
-          type="button"
+        <IconButton
+          variant="toolbar"
           onClick={() => currentPath && void loadPath(currentPath)}
           disabled={!session || isLoading}
           aria-label="새로고침"
           title="새로고침"
         >
           {isLoading ? <Loader2 size={16} className="spin" /> : <RefreshCw size={16} />}
-        </button>
+        </IconButton>
       </div>
 
       <div className="path-row">
-        <button
-          className="icon-action"
-          type="button"
+        <IconButton
+          variant="toolbar"
           onClick={() => session && void loadPath(session.homeDir)}
           disabled={!session}
           aria-label="홈 디렉터리"
           title="홈 디렉터리"
         >
           <Home size={15} />
-        </button>
-        <button
-          className="icon-action"
-          type="button"
+        </IconButton>
+        <IconButton
+          variant="toolbar"
           onClick={() => session && void loadPath(parentPath(currentPath, session.homeDir))}
           disabled={!session || currentPath === session.homeDir}
           aria-label="상위 폴더"
           title="상위 폴더"
         >
           <ChevronRight size={15} className="up-icon" />
-        </button>
-        <input
+        </IconButton>
+        <Input
           value={currentPath}
           onChange={(event) => setCurrentPath(event.target.value)}
           onKeyDown={(event) => {
@@ -256,19 +261,19 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
           <span>선택</span>
           <strong>{selectedFile ? pathBasename(selectedFile.path) : "-"}</strong>
         </div>
-        <button
-          className="secondary-button"
-          type="button"
+        <Button
+          variant="secondary"
           disabled={!selectedFile}
           onClick={() => selectedFile && onInsertPath(selectedFile.path)}
         >
           <UploadCloud size={15} />
           경로 삽입
-        </button>
+        </Button>
       </div>
 
       {contextMenu ? (
         <div
+          ref={contextMenuRef}
           className="file-context-menu"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           role="menu"
@@ -283,19 +288,19 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
             }}
           >
             <Search size={14} />
-            <input
+            <Input
               ref={contextPathInputRef}
               value={contextMenu.pathQuery}
               onChange={(event) => updateContextPath(event.target.value)}
               aria-label="경로 검색"
               placeholder="경로 검색"
             />
-            <button className="context-icon-button" type="submit" aria-label="이동" title="이동">
+            <IconButton variant="context" type="submit" aria-label="이동" title="이동">
               <CornerDownRight size={14} />
-            </button>
+            </IconButton>
           </form>
-          <button
-            type="button"
+          <Button
+            variant="menuItem"
             role="menuitem"
             disabled={contextMenu.target?.type !== "directory"}
             onClick={() => {
@@ -305,9 +310,9 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
           >
             <FolderOpen size={14} />
             열기
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="menuItem"
             role="menuitem"
             disabled={!contextMenu.target}
             onClick={() => {
@@ -317,15 +322,15 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
           >
             <UploadCloud size={14} />
             경로 삽입
-          </button>
-          <button type="button" role="menuitem" onClick={() => runContextAction(() => void loadPath(currentPath))}>
+          </Button>
+          <Button variant="menuItem" role="menuitem" onClick={() => runContextAction(() => void loadPath(currentPath))}>
             <RefreshCw size={14} />
             새로고침
-          </button>
-          <button type="button" role="menuitem" onClick={() => runContextAction(() => void loadPath(homePath))}>
+          </Button>
+          <Button variant="menuItem" role="menuitem" onClick={() => runContextAction(() => void loadPath(homePath))}>
             <Home size={14} />
             홈으로
-          </button>
+          </Button>
         </div>
       ) : null}
     </aside>
