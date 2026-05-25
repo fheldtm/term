@@ -78,10 +78,13 @@ try {
   await page.getByLabel("Host").fill("example.com");
   await page.getByLabel("User").fill("user");
   await page.getByLabel("Password").fill("secret");
-  await page.keyboard.press("Enter");
-  await page.getByRole("dialog", { name: "연결 저장" }).waitFor({ timeout: 8000 });
-  await page.getByLabel("비밀번호도 저장").check();
+  await page.getByLabel("비밀번호 저장").check();
   await page.getByRole("button", { name: "저장", exact: true }).click();
+  await page.getByRole("button", { name: /user@example.com/ }).waitFor({ timeout: 8000 });
+  await page.getByRole("button", { name: "접속", exact: true }).click();
+  if (await page.getByRole("dialog", { name: "연결 저장" }).count()) {
+    throw new Error("save prompt should not appear after connecting");
+  }
   await page.getByRole("button", { name: "연결 변경" }).click();
   await page.getByRole("button", { name: /user@example.com/ }).dblclick();
   await page.getByText("user@example.com").first().waitFor({ timeout: 8000 });

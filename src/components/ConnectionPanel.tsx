@@ -4,6 +4,7 @@ import {
   KeyRound,
   Loader2,
   Plug,
+  Save,
   Server,
   Trash2,
   Unplug,
@@ -44,11 +45,6 @@ type ConnectionForm = {
   authMode: AuthMode;
 };
 
-type PendingSave = {
-  form: ConnectionForm;
-  session: SessionInfo;
-};
-
 type ConnectionPanelProps = {
   session: SessionInfo | null;
   isConnecting: boolean;
@@ -79,9 +75,8 @@ export function ConnectionPanel({
   const [form, setForm] = useState<ConnectionForm>(EMPTY_FORM);
   const [savedConnections, setSavedConnections] = useState<SavedConnection[]>(() => readSavedConnections());
   const [selectedId, setSelectedId] = useState("");
-  const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
   const [saveSecret, setSaveSecret] = useState(false);
-  const [modalMessage, setModalMessage] = useState("");
+  const [modalMessage, setModalMessage] = useState<{ tone: "error" | "ok"; text: string } | null>(null);
   const hostInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
   const privateKeyInputRef = useRef<HTMLTextAreaElement>(null);
@@ -103,13 +98,13 @@ export function ConnectionPanel({
 
   function openModal() {
     setIsModalOpen(true);
-    setModalMessage("");
+    setModalMessage(null);
   }
 
   function closeModal() {
     if (isConnecting) return;
     setIsModalOpen(false);
-    setModalMessage("");
+    setModalMessage(null);
   }
 
   function updateField<K extends keyof ConnectionForm>(key: K, value: ConnectionForm[K]) {
@@ -127,7 +122,8 @@ export function ConnectionPanel({
       passphrase: connection.passphrase || "",
       authMode: connection.authMode
     });
-    setModalMessage("");
+    setSaveSecret(Boolean(connection.password || connection.privateKey));
+    setModalMessage(null);
   }
 
   async function connectFromForm(event?: FormEvent<HTMLFormElement>) {
@@ -136,7 +132,7 @@ export function ConnectionPanel({
 
     const payload = formToPayload(form);
     if (!payload.host || !payload.username) {
-      setModalMessage("Host와 User를 입력하세요.");
+      setModalError("Host와 User를 입력하세요.");
       return;
     }
 
@@ -144,8 +140,7 @@ export function ConnectionPanel({
     if (!nextSession) return;
 
     setIsModalOpen(false);
-    setSaveSecret(false);
-    setPendingSave({ form, session: nextSession });
+    setModalMessage(null);
   }
 
   async function connectSaved(connection: SavedConnection) {
@@ -153,12 +148,12 @@ export function ConnectionPanel({
 
     applySavedConnection(connection);
     if (connection.authMode === "password" && !connection.password) {
-      setModalMessage("저장된 비밀번호가 없습니다. 비밀번호 입력 후 Enter로 접속하세요.");
+      setModalError("저장된 비밀번호가 없습니다. 비밀번호 입력 후 Enter로 접속하세요.");
       window.setTimeout(() => passwordInputRef.current?.focus(), 0);
       return;
     }
     if (connection.authMode === "key" && !connection.privateKey) {
-      setModalMessage("저장된 Private key가 없습니다. Key 입력 후 Ctrl+Enter로 접속하세요.");
+      setModalError("저장된 Private key가 없습니다. Key 입력 후 Ctrl+Enter로 접속하세요.");
       window.setTimeout(() => privateKeyInputRef.current?.focus(), 0);
       return;
     }
@@ -166,55 +161,55 @@ export function ConnectionPanel({
     const nextSession = await onConnect(savedConnectionToPayload(connection));
     if (nextSession) {
       setIsModalOpen(false);
-      setModalMessage("");
+      setModalMessage(null);
     }
   }
 
-  function savePendingConnection() {
-    if (!pendingSave) return;
-
-    const { form: sourceForm, session: nextSession } = pendingSave;
-    const id = connectionId(sourceForm);
-    const nextConnection: SavedConnection = {
-      id,
-      name: nextSession.label,
-      host: sourceForm.host.trim(),
-      port: sourceForm.port || 22,
-      username: sourceForm.username.trim(),
-      authMode: sourceForm.authMode,
-      savedAt: Date.now()
-    };
-
-    if (saveSecret) {
-      if (sourceForm.authMode === "password") nextConnection.password = sourceForm.password;
-      if (sourceForm.authMode === "key") {
-        nextConnection.privateKey = sourceForm.privateKey;
-        nextConnection.passphrase = sourceForm.passphrase;
-      }
+  function saveConnectionFromForm() {
+    const payload = formToPayload(form);
+    if (!payload.host || !payload.username) {
+      setModalError("Host와 User를 입력하세요.");
+      return;
     }
 
-    setSavedConnections((items) => [
-      nextConnection,
-      ...items.filter((item) => item.id !== id)
-    ]);
-    setPendingSave(null);
-  }
+    const previousId = selectedConnection?.id;
+    const nextConnection = formToSavedConnection(form, saveSecret);
 
-  function skipSave() {
-    setPendingSave(null);
-    setSaveSecret(false);
+    setSavedConnections((items) => {
+      const filtered = items.filter((item) => item.id !== previousId && item.id !== nextConnection.id);
+      if (!previousId) return [nextConnection, ...filtered];
+
+      const previousIndex = items.findIndex((item) => item.id === previousId);
+      const insertIndex = previousIndex >= 0 ? Math.min(previousIndex, filtered.length) : 0;
+      const nextItems = [...filtered];
+      nextItems.splice(insertIndex, 0, nextConnection);
+      return nextItems;
+    });
+    setSelectedId(nextConnection.id);
+    setModalOk(previousId ? "저장된 연결을 수정했습니다." : "연결을 저장했습니다.");
   }
 
   function removeSavedConnection(id: string) {
     setSavedConnections((items) => items.filter((item) => item.id !== id));
-    if (selectedId === id) setSelectedId("");
+    if (selectedId === id) {
+      setSelectedId("");
+      setSaveSecret(false);
+    }
   }
 
   function handleModalKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") closeModal();
   }
 
-  const secretLabel = pendingSave?.form.authMode === "key" ? "Private key도 저장" : "비밀번호도 저장";
+  function setModalError(text: string) {
+    setModalMessage({ tone: "error", text });
+  }
+
+  function setModalOk(text: string) {
+    setModalMessage({ tone: "ok", text });
+  }
+
+  const secretLabel = form.authMode === "key" ? "Private key 저장" : "비밀번호 저장";
 
   return (
     <section className="connection-panel" aria-label="SSH connection">
@@ -383,11 +378,31 @@ export function ConnectionPanel({
                   </>
                 )}
 
-                {modalMessage ? <div className="inline-error">{modalMessage}</div> : null}
+                <label className="connection-secret-row">
+                  <input
+                    type="checkbox"
+                    checked={saveSecret}
+                    onChange={(event) => setSaveSecret(event.target.checked)}
+                  />
+                  <span>
+                    <strong>{secretLabel}</strong>
+                    <small>체크하면 현재 기기의 localStorage에 함께 저장됩니다.</small>
+                  </span>
+                </label>
+
+                {modalMessage ? (
+                  <div className={`inline-error ${modalMessage.tone === "ok" ? "is-ok" : ""}`}>
+                    {modalMessage.text}
+                  </div>
+                ) : null}
 
                 <div className="connection-form__actions">
                   <Button variant="ghost" onClick={closeModal}>
                     취소
+                  </Button>
+                  <Button variant="secondary" onClick={saveConnectionFromForm}>
+                    <Save size={15} />
+                    {selectedConnection ? "변경 저장" : "저장"}
                   </Button>
                   <Button variant="primary" type="submit" disabled={isConnecting}>
                     {isConnecting ? <Loader2 size={15} className="spin" /> : <Plug size={15} />}
@@ -400,38 +415,6 @@ export function ConnectionPanel({
         </div>
       ) : null}
 
-      {pendingSave ? (
-        <div className="modal-backdrop" role="presentation">
-          <div className="save-connection-modal" role="dialog" aria-modal="true" aria-label="연결 저장">
-            <div className="connection-modal__head">
-              <div>
-                <strong>연결을 저장할까요?</strong>
-                <span>{pendingSave.session.label}</span>
-              </div>
-            </div>
-            <p>
-              저장된 연결은 다음부터 목록에서 더블 클릭으로 접속할 수 있습니다.
-            </p>
-            <label className="check-row">
-              <input
-                type="checkbox"
-                checked={saveSecret}
-                onChange={(event) => setSaveSecret(event.target.checked)}
-              />
-              <span>{secretLabel}</span>
-            </label>
-            <small>비밀번호와 key는 현재 기기의 localStorage에 저장됩니다.</small>
-            <div className="save-connection-modal__actions">
-              <Button variant="ghost" onClick={skipSave}>
-                저장 안 함
-              </Button>
-              <Button variant="primary" onClick={savePendingConnection}>
-                저장
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -458,6 +441,28 @@ function savedConnectionToPayload(connection: SavedConnection): ConnectPayload {
     privateKey: connection.authMode === "key" ? connection.privateKey : undefined,
     passphrase: connection.authMode === "key" ? connection.passphrase : undefined
   };
+}
+
+function formToSavedConnection(form: ConnectionForm, includeSecret: boolean): SavedConnection {
+  const nextConnection: SavedConnection = {
+    id: connectionId(form),
+    name: `${form.username.trim()}@${form.host.trim()}`,
+    host: form.host.trim(),
+    port: form.port || 22,
+    username: form.username.trim(),
+    authMode: form.authMode,
+    savedAt: Date.now()
+  };
+
+  if (includeSecret) {
+    if (form.authMode === "password" && form.password) nextConnection.password = form.password;
+    if (form.authMode === "key" && form.privateKey) {
+      nextConnection.privateKey = form.privateKey;
+      if (form.passphrase) nextConnection.passphrase = form.passphrase;
+    }
+  }
+
+  return nextConnection;
 }
 
 function connectionId(form: ConnectionForm) {

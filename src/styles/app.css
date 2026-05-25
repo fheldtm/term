@@ -499,6 +499,33 @@ button {
   margin-top: 4px;
 }
 
+.connection-secret-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.connection-secret-row input {
+  width: 15px;
+  height: 15px;
+  margin: 1px 0 0;
+  accent-color: var(--green);
+}
+
+.connection-secret-row strong,
+.connection-secret-row small {
+  display: block;
+}
+
+.connection-secret-row small {
+  margin-top: 3px;
+  color: var(--text-soft);
+  line-height: 1.4;
+}
+
 .save-connection-modal__actions {
   display: flex;
   align-items: center;
@@ -717,6 +744,12 @@ body.is-resizing-explorer {
   color: var(--red-text);
   padding: 8px;
   font-size: 12px;
+}
+
+.inline-error.is-ok {
+  border-color: var(--green);
+  background: var(--green-soft);
+  color: var(--text-dark);
 }
 
 .file-table {
