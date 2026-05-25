@@ -501,6 +501,75 @@ button:disabled {
   font-size: 12px;
 }
 
+.file-context-menu {
+  position: fixed;
+  z-index: 40;
+  display: grid;
+  gap: 3px;
+  width: 270px;
+  border: 1px solid #435443;
+  background: #111811;
+  padding: 6px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+}
+
+.context-search {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 26px;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  border: 1px solid #354234;
+  background: #0b120d;
+  color: var(--text-soft);
+  padding: 0 5px;
+}
+
+.context-search input {
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.context-search input::placeholder {
+  color: #758474;
+}
+
+.context-icon-button,
+.file-context-menu > button {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.context-icon-button {
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--text-soft);
+}
+
+.file-context-menu > button {
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 8px;
+  font-size: 12px;
+  text-align: left;
+}
+
+.context-icon-button:hover,
+.file-context-menu > button:hover {
+  background: #2a352b;
+  color: var(--green);
+}
+
 .terminal-workbench {
   position: relative;
   display: grid;

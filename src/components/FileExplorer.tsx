@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 import {
   ChevronRight,
+  CornerDownRight,
   File,
   FileCode2,
   Folder,
@@ -8,6 +10,7 @@ import {
   Home,
   Loader2,
   RefreshCw,
+  Search,
   TerminalSquare,
   UploadCloud
 } from "lucide-react";
@@ -20,34 +23,76 @@ type FileExplorerProps = {
   onInsertPath: (path: string) => void;
 };
 
+type ContextMenuState = {
+  x: number;
+  y: number;
+  target: RemoteFile | null;
+  pathQuery: string;
+};
+
 export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
   const [currentPath, setCurrentPath] = useState("");
   const [files, setFiles] = useState<RemoteFile[]>([]);
   const [selectedPath, setSelectedPath] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const contextPathInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!session) {
       setCurrentPath("");
       setFiles([]);
       setSelectedPath("");
+      setContextMenu(null);
       return;
     }
     void loadPath(session.cwd);
   }, [session]);
 
+  useEffect(() => {
+    if (!contextMenu) return;
+    contextPathInputRef.current?.focus();
+  }, [contextMenu]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+
+    function closeContextMenu() {
+      setContextMenu(null);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") closeContextMenu();
+    }
+
+    window.addEventListener("click", closeContextMenu);
+    window.addEventListener("resize", closeContextMenu);
+    window.addEventListener("scroll", closeContextMenu, true);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("click", closeContextMenu);
+      window.removeEventListener("resize", closeContextMenu);
+      window.removeEventListener("scroll", closeContextMenu, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [contextMenu]);
+
   const selectedFile = useMemo(
     () => files.find((file) => file.path === selectedPath),
     [files, selectedPath]
   );
+  const homePath = session?.homeDir ?? "";
 
   async function loadPath(path: string) {
     if (!session) return;
+    const nextPath = path.trim() || session.homeDir;
     setIsLoading(true);
     setError("");
+    setContextMenu(null);
     try {
-      const response = await listFiles(session.id, path);
+      const response = await listFiles(session.id, nextPath);
       setCurrentPath(response.path);
       setFiles(response.files);
       setSelectedPath("");
@@ -63,6 +108,49 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
     if (file.type === "directory") {
       void loadPath(file.path);
     }
+  }
+
+  function selectEntry(file: RemoteFile, clickCount: number) {
+    setSelectedPath(file.path);
+    if (clickCount >= 2 && file.type === "directory") {
+      void loadPath(file.path);
+    }
+  }
+
+  function openContextMenu(event: MouseEvent, target: RemoteFile | null = null) {
+    if (!session) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (target) setSelectedPath(target.path);
+
+    const menuWidth = 278;
+    const menuHeight = 198;
+    const x = Math.min(event.clientX, window.innerWidth - menuWidth - 8);
+    const y = Math.min(event.clientY, window.innerHeight - menuHeight - 8);
+    const pathQuery = target?.type === "directory" ? target.path : currentPath || session.homeDir;
+
+    setContextMenu({
+      x: Math.max(8, x),
+      y: Math.max(8, y),
+      target,
+      pathQuery
+    });
+  }
+
+  function updateContextPath(pathQuery: string) {
+    setContextMenu((menu) => (menu ? { ...menu, pathQuery } : menu));
+  }
+
+  function submitContextPath() {
+    const pathQuery = contextMenu?.pathQuery.trim();
+    if (!pathQuery) return;
+    void loadPath(pathQuery);
+  }
+
+  function runContextAction(action: () => void) {
+    setContextMenu(null);
+    action();
   }
 
   function renderIcon(file: RemoteFile) {
@@ -124,7 +212,7 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
 
       {error ? <div className="inline-error">{error}</div> : null}
 
-      <div className="file-table" role="tree">
+      <div className="file-table" role="tree" onContextMenu={(event) => openContextMenu(event)}>
         {!session ? (
           <div className="empty-state">
             <TerminalSquare size={22} />
@@ -137,8 +225,14 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
               className={`file-row ${selectedPath === file.path ? "is-selected" : ""}`}
               type="button"
               key={file.path}
-              onClick={() => setSelectedPath(file.path)}
-              onDoubleClick={() => openEntry(file)}
+              onClick={(event) => selectEntry(file, event.detail)}
+              onContextMenu={(event) => openContextMenu(event, file)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && file.type === "directory") {
+                  event.preventDefault();
+                  openEntry(file);
+                }
+              }}
             >
               <span className="file-row__icon">
                 {file.type === "directory" && selectedPath === file.path ? <FolderOpen size={15} /> : renderIcon(file)}
@@ -172,6 +266,68 @@ export function FileExplorer({ session, onInsertPath }: FileExplorerProps) {
           경로 삽입
         </button>
       </div>
+
+      {contextMenu ? (
+        <div
+          className="file-context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          role="menu"
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <form
+            className="context-search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitContextPath();
+            }}
+          >
+            <Search size={14} />
+            <input
+              ref={contextPathInputRef}
+              value={contextMenu.pathQuery}
+              onChange={(event) => updateContextPath(event.target.value)}
+              aria-label="경로 검색"
+              placeholder="경로 검색"
+            />
+            <button className="context-icon-button" type="submit" aria-label="이동" title="이동">
+              <CornerDownRight size={14} />
+            </button>
+          </form>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={contextMenu.target?.type !== "directory"}
+            onClick={() => {
+              const target = contextMenu.target;
+              if (target) runContextAction(() => openEntry(target));
+            }}
+          >
+            <FolderOpen size={14} />
+            열기
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={!contextMenu.target}
+            onClick={() => {
+              const target = contextMenu.target;
+              if (target) runContextAction(() => onInsertPath(target.path));
+            }}
+          >
+            <UploadCloud size={14} />
+            경로 삽입
+          </button>
+          <button type="button" role="menuitem" onClick={() => runContextAction(() => void loadPath(currentPath))}>
+            <RefreshCw size={14} />
+            새로고침
+          </button>
+          <button type="button" role="menuitem" onClick={() => runContextAction(() => void loadPath(homePath))}>
+            <Home size={14} />
+            홈으로
+          </button>
+        </div>
+      ) : null}
     </aside>
   );
 }
